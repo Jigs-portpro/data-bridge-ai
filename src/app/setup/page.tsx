@@ -9,11 +9,10 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-// import { Textarea } from '@/components/ui/textarea'; // No longer used for JSON generation display
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
-import { Trash2, PlusCircle, Download, Settings, ChevronsUpDown, Loader2 } from 'lucide-react';
-import type { ExportEntity, ExportEntityField } from '@/config/exportEntities'; // Only import types
+import { Trash2, PlusCircle, Download, Settings, Loader2 } from 'lucide-react';
+import type { ExportEntity, ExportEntityField } from '@/config/exportEntities';
 import { useAppContext } from '@/hooks/useAppContext';
 import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -25,7 +24,7 @@ interface SetupExportEntityField extends ExportEntityField {
 
 interface SetupExportEntity extends Omit<ExportEntity, 'fields'> {
   internalId: string;
-  id: string; // Ensure 'id' is always part of SetupExportEntity, not optional from Omit
+  id: string; 
   fields: SetupExportEntityField[];
 }
 
@@ -38,7 +37,6 @@ export default function SetupPage() {
   const [entities, setEntities] = useState<SetupExportEntity[]>([]);
   const [isFetching, setIsFetching] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
-  // const [generatedJson, setGeneratedJson] = useState<string>(''); // No longer generating JSON to display
 
   useEffect(() => {
     if (!isAuthLoading && !isAuthenticated) {
@@ -54,11 +52,11 @@ export default function SetupPage() {
       const data: ExportEntity[] = await response.json();
       setEntities(data.map(e => ({
         ...e,
-        id: e.id || `entity-${Math.random().toString(36).substring(2, 11)}`, // Ensure ID exists
-        internalId: e.id || `entity-internal-${Math.random().toString(36).substring(2, 11)}`,
+        id: e.id || `entity-${Math.random().toString(36).substring(2, 11)}`,
+        internalId: e.id || `entity-internal-${Math.random().toString(36).substring(2, 11)}-${Date.now()}`,
         fields: e.fields.map(f => ({
           ...f,
-          internalId: `field-internal-${Math.random().toString(36).substring(2, 9)}-${e.id}-${f.name}`
+          internalId: `field-internal-${Math.random().toString(36).substring(2, 9)}-${e.id}-${f.name}-${Date.now()}`
         }))
       })));
     } catch (error) {
@@ -78,25 +76,32 @@ export default function SetupPage() {
 
   const handleSaveConfig = async () => {
     setIsSaving(true);
-    // Convert SetupExportEntity back to ExportEntity for saving (remove internalId)
     const entitiesToSave: ExportEntity[] = entities.map(({ internalId, fields, ...rest }) => ({
       ...rest,
-      id: rest.id, // Ensure id is passed
-      fields: fields.map(({ internalId: fieldInternalId, ...fieldRest }) => fieldRest)
+      id: rest.id,
+      fields: fields.map(({ internalId: fieldInternalId, ...fieldRest }) => {
+        // Ensure optional numeric/string fields are undefined if empty, not NaN or empty strings
+        const cleanedField: ExportEntityField = { ...fieldRest };
+        if (cleanedField.minLength === undefined || cleanedField.minLength === null || isNaN(Number(cleanedField.minLength))) delete cleanedField.minLength;
+        if (cleanedField.maxLength === undefined || cleanedField.maxLength === null || isNaN(Number(cleanedField.maxLength))) delete cleanedField.maxLength;
+        if (cleanedField.minValue === undefined || cleanedField.minValue === null || isNaN(Number(cleanedField.minValue))) delete cleanedField.minValue;
+        if (cleanedField.maxValue === undefined || cleanedField.maxValue === null || isNaN(Number(cleanedField.maxValue))) delete cleanedField.maxValue;
+        if (cleanedField.pattern === '') delete cleanedField.pattern;
+        return cleanedField;
+      })
     }));
 
     try {
       const response = await fetch('/api/export-entities', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(entitiesToSave, null, 2), // Pretty print for file readability
+        body: JSON.stringify(entitiesToSave, null, 2),
       });
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ message: 'Failed to save configuration.' }));
         throw new Error(errorData.message);
       }
       showToast({ title: 'Success', description: 'Configuration saved successfully to exportEntities.json.' });
-      // setGeneratedJson(''); // Clear generated JSON display after successful save
     } catch (error: any) {
       console.error('Failed to save entities config:', error);
       showToast({ title: 'Error Saving', description: error.message || 'Could not save entity configurations.', variant: 'destructive' });
@@ -106,14 +111,15 @@ export default function SetupPage() {
   };
 
   const handleAddEntity = () => {
-    const newEntityInternalId = `entity-internal-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
-    const newEntityId = `new-entity-${entities.length + 1}-${Math.random().toString(36).substring(2, 5)}`;
+    const randomSuffix = Math.random().toString(36).substring(2, 7);
+    const newEntityInternalId = `entity-internal-${Date.now()}-${randomSuffix}`;
+    const newEntityId = `new-entity-${entities.length + 1}-${randomSuffix}`;
     setEntities([
       ...entities,
       {
         internalId: newEntityInternalId,
-        id: newEntityId, // This is the editable system ID
-        name: `New Entity ${entities.length + 1}`, // This is the display name
+        id: newEntityId,
+        name: `New Entity ${entities.length + 1}`,
         url: 'https://api.example.com/your-endpoint',
         fields: [],
       },
@@ -176,8 +182,8 @@ export default function SetupPage() {
                   ? {
                       ...f,
                       [prop]: (prop === 'minLength' || prop === 'maxLength' || prop === 'minValue' || prop === 'maxValue')
-                               ? (value === '' ? undefined : Number(value))
-                               : (value === '' && (prop === 'pattern')) 
+                               ? (value === '' || isNaN(Number(value)) ? undefined : Number(value))
+                               : (prop === 'pattern' && value === '') 
                                  ? undefined
                                  : value
                     }
@@ -217,6 +223,7 @@ export default function SetupPage() {
         <CardDescription>
           Define the target entities for data export. Configure their API endpoints, field names, types, and validation rules.
           Your configurations are saved to <code>exportEntities.json</code> in the project root when you click "Save Configuration".
+          To apply changes, copy the generated JSON and replace the contents of the <code>exportEntities</code> variable in <code>src/config/exportEntities.ts</code> (or if you created <code>exportEntities.json</code> at the project root, replace its content). After saving the file, a server restart might be needed.
         </CardDescription>
         
         <Separator />
@@ -228,7 +235,7 @@ export default function SetupPage() {
           </Card>
         )}
 
-        <ScrollArea className="flex-grow pr-3"> {/* Outer ScrollArea for entities list */}
+        <ScrollArea className="flex-grow pr-3"> 
           <Accordion type="multiple" className="w-full space-y-4">
             {entities.map((entity) => (
               <AccordionItem key={entity.internalId} value={entity.internalId} className="border rounded-lg shadow-sm bg-card">
@@ -247,8 +254,7 @@ export default function SetupPage() {
                   </div>
                 </AccordionTrigger>
                 <AccordionContent className="px-6 pb-6 pt-0">
-                  {/* Flex container for AccordionContent children */}
-                  <div className="flex flex-col space-y-4" style={{ maxHeight: 'calc(100vh - 250px)', overflowY: 'auto' }}> {/* Adjusted max height and added overflowY */}
+                  <div className="flex flex-col space-y-4"> 
                     <div className="flex-shrink-0 space-y-4">
                       <div>
                         <Label htmlFor={`entity-id-${entity.internalId}`}>Unique Entity ID (for system use)</Label>
@@ -273,7 +279,6 @@ export default function SetupPage() {
                       <Separator/>
                     </div>
                     
-                    {/* Flex container for the fields section, allowing it to grow and scroll */}
                     <div className="flex flex-col flex-grow min-h-0">
                       <div className="flex justify-between items-center flex-shrink-0">
                         <h4 className="font-medium">Target API Fields</h4>
@@ -281,8 +286,7 @@ export default function SetupPage() {
                           <PlusCircle className="mr-2 h-4 w-4" /> Add Field
                         </Button>
                       </div>
-                      {/* ScrollArea for the fields themselves */}
-                      <ScrollArea className="mt-2 border rounded-md flex-grow min-h-0"> {/* Removed max-h-96 to rely on parent flex constraints */}
+                      <ScrollArea className="mt-2 border rounded-md max-h-96"> 
                         <div className="p-4 space-y-4">
                           {entity.fields.length === 0 && <p className="text-sm text-muted-foreground">No fields defined for this entity.</p>}
                           {entity.fields.map((field) => (
@@ -393,6 +397,11 @@ export default function SetupPage() {
                                     </div>
                                   </div>
                                 )}
+                                {field.type === 'date' && ( // No specific validation inputs for date other than type for now
+                                  <div className="pt-2">
+                                    <p className="text-xs text-muted-foreground">Date format validation (e.g., YYYY-MM-DD, MM/DD/YYYY) will be applied during export.</p>
+                                  </div>
+                                )}
                               </div>
                             </Card>
                           ))}
@@ -412,9 +421,9 @@ export default function SetupPage() {
               <CardHeader>
                 <CardTitle className="flex items-center"><Download className="mr-2 h-5 w-5"/>Save Configuration to File</CardTitle>
                 <CardDescription>
-                  Click the button below to save your current entity configuration to <code>exportEntities.json</code> in the project root.
-                  This file acts as your current database for entity definitions. After saving, you might need to restart the development server
-                  for changes to be fully reflected in the application if the file is cached.
+                 Click the button below to save your current entity configuration to <code>exportEntities.json</code> in the project root.
+                 This file acts as your current database for entity definitions. The application reads this file when loading configurations.
+                 If the file does not exist, an empty configuration will be used.
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -429,6 +438,3 @@ export default function SetupPage() {
     </AppLayout>
   );
 }
-
-
-    
