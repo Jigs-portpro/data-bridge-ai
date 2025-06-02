@@ -15,7 +15,7 @@ import {
   Settings,
   KeyRound,
   Send,
-  DownloadCloud, // Added for CSV export icon
+  DownloadCloud,
 } from 'lucide-react';
 import {
   Sidebar,
@@ -44,6 +44,8 @@ const toolConfig = [
 export function DataToolsSidebar() {
   const { openDialog, data, isAuthenticated, logout } = useAppContext();
   const isDataLoaded = data.length > 0;
+
+  const isExportDataDisabled = !isDataLoaded || !isAuthenticated;
 
   return (
     <Sidebar collapsible="icon" variant="sidebar" className="border-r">
@@ -83,9 +85,21 @@ export function DataToolsSidebar() {
                  <SidebarGroupContent>
                     <SidebarMenu>
                          <SidebarMenuItem>
-                            <Link href="/export-data" passHref legacyBehavior>
+                            <Link
+                                href="/export-data"
+                                passHref
+                                legacyBehavior
+                                onClick={(e) => {
+                                    if (isExportDataDisabled) {
+                                    e.preventDefault();
+                                    }
+                                }}
+                                aria-disabled={isExportDataDisabled}
+                                tabIndex={isExportDataDisabled ? -1 : undefined}
+                                className={isExportDataDisabled ? 'pointer-events-none opacity-50' : ''}
+                            >
                                 <SidebarMenuButton
-                                    disabled={!isDataLoaded || !isAuthenticated}
+                                    disabled={isExportDataDisabled}
                                     tooltip={{children: "Prepare & Export Data", side:"right", align:"center"}}
                                     className="justify-start"
                                     asChild
