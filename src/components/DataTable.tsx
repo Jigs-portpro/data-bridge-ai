@@ -43,12 +43,12 @@ export function DataTable() {
   return (
     <div className="space-y-4 p-1 h-full flex flex-col">
       {fileName && <h2 className="text-xl font-semibold font-headline flex-shrink-0">Preview: {fileName}</h2>}
-      <ScrollArea className="rounded-md border shadow-sm w-full whitespace-nowrap bg-card flex-grow min-h-0">
+      <ScrollArea className="rounded-md border shadow-sm w-full bg-card flex-grow min-h-0">
         <Table>
           <TableHeader>
             <TableRow>
               {columns.map((col) => (
-                <TableHead key={col} className="font-semibold whitespace-nowrap">{col}</TableHead>
+                <TableHead key={col} className="font-semibold whitespace-nowrap w-[1%]">{col}</TableHead>
               ))}
             </TableRow>
           </TableHeader>
@@ -56,7 +56,7 @@ export function DataTable() {
             {data.map((row, rowIndex) => (
               <TableRow key={rowIndex}>
                 {columns.map((col) => (
-                  <TableCell key={`${rowIndex}-${col}`}>{String(row[col] ?? '')}</TableCell>
+                  <TableCell key={`${rowIndex}-${col}`} className="whitespace-nowrap">{String(row[col] ?? '')}</TableCell>
                 ))}
               </TableRow>
             ))}
@@ -67,3 +67,4 @@ export function DataTable() {
     </div>
   );
 }
+
