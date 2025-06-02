@@ -11,7 +11,7 @@ import { DataEnrichmentDialog } from '@/components/dialogs/DataEnrichmentDialog'
 import { ColumnReorderDialog } from '@/components/dialogs/ColumnReorderDialog';
 import { AnomalyReportDialog } from '@/components/dialogs/AnomalyReportDialog';
 import { DuplicateDetectionDialog } from '@/components/dialogs/DuplicateDetectionDialog';
-import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar';
+import { SidebarProvider, SidebarInset, SidebarTrigger } from '@/components/ui/sidebar';
 import { Separator } from '@/components/ui/separator';
 
 export function AppLayout() {
@@ -26,7 +26,10 @@ export function AppLayout() {
             {/* Header Section */}
             <div className="flex-shrink-0">
               <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
-                <h1 className="text-3xl font-bold font-headline text-primary">DataWise Dashboard</h1>
+                <div className="flex items-center gap-2">
+                  <SidebarTrigger className="hidden md:flex" />
+                  <h1 className="text-3xl font-bold font-headline text-primary">DataWise Dashboard</h1>
+                </div>
                 <div className="flex flex-col sm:flex-row items-center gap-2">
                   <FileUploadButton />
                 </div>
