@@ -10,7 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { useAppContext } from '@/hooks/useAppContext';
 import { LogoIcon } from '@/components/icons/LogoIcon';
-import { Loader2 } from 'lucide-react';
+import { AmpersandsIcon, Loader2 } from 'lucide-react';
 
 export default function LoginPage() {
   const [username, setUsername] = useState('');
@@ -72,6 +72,7 @@ export default function LoginPage() {
                 id="username"
                 type="text"
                 placeholder="admin"
+                defaultValue="admin"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 required
@@ -84,6 +85,7 @@ export default function LoginPage() {
                 id="password"
                 type="password"
                 placeholder="password"
+                defaultValue={"password"}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
