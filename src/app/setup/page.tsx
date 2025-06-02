@@ -153,7 +153,6 @@ export default function SetupPage() {
         ...entityRest,
         id: entityRest.id,
         fields: fields.map(({ internalId: fieldInternalId, ...fieldRest }) => {
-            // Remove undefined validation fields for cleaner JSON
             const cleanedField: Partial<ExportEntityField> = {};
             for (const key in fieldRest) {
                 if (fieldRest[key as keyof typeof fieldRest] !== undefined) {
@@ -173,7 +172,7 @@ export default function SetupPage() {
 
   if (isAuthLoading || !isAuthenticated || isLoadingState) {
     return (
-      <AppLayout>
+      <AppLayout pageTitle="Loading Setup...">
         <div className="flex h-full items-center justify-center">
           <Loader2 className="h-12 w-12 animate-spin text-primary" />
         </div>
@@ -181,18 +180,22 @@ export default function SetupPage() {
     );
   }
 
+  const pageTitleString = "Entity Configuration Setup";
+
   return (
-    <AppLayout>
+    <AppLayout pageTitle={pageTitleString}>
       <div className="space-y-6 h-full flex flex-col">
+        {/* Page-specific header actions like "Add New Target Entity" */}
         <div className="flex justify-between items-center flex-shrink-0">
-          <div className="flex items-center gap-2">
-            <Settings className="h-8 w-8 text-primary" />
-            <h1 className="text-3xl font-bold font-headline text-primary">Entity Configuration Setup</h1>
-          </div>
+           <div className="flex items-center gap-2">
+             <Settings className="h-6 w-6 text-muted-foreground" /> {/* Icon for context, title is in AppLayout */}
+             <span className="text-lg font-semibold">Manage Target Entities</span>
+           </div>
           <Button onClick={handleAddEntity} size="sm">
             <PlusCircle className="mr-2 h-4 w-4" /> Add New Target Entity
           </Button>
         </div>
+        
         <CardDescription className="flex-shrink-0">
           Define target entities for data export: their API endpoints, and the schema for each field (name, type, required status, and validation rules).
           After configuration, click "Generate JSON for Config File". Then, **manually copy the entire text output** from the box below.
@@ -200,7 +203,8 @@ export default function SetupPage() {
           **Replace the existing array content** (the part inside the square brackets <code>[]</code>) of the <code>export const exportEntities: ExportEntity[] = ...;</code> line with your copied JSON.
           This is how your configuration is "saved" for the application to use.
         </CardDescription>
-        <Separator className="flex-shrink-0" />
+        
+        {/* Separator is now part of AppLayout global header */}
 
         {entities.length === 0 && (
           <p className="text-muted-foreground text-center py-8 flex-shrink-0">No entities defined. Click "Add New Target Entity" to start.</p>
@@ -283,7 +287,6 @@ export default function SetupPage() {
                               </div>
                             </div>
 
-                            {/* Conditional Validation Rule Inputs */}
                             {(field.type === 'string' || field.type === 'email') && (
                               <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-2">
                                 <div>

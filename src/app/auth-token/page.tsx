@@ -50,8 +50,6 @@ export default function AuthTokenPage() {
         throw new Error(responseData.message || `API Error: ${response.status}`);
       }
       
-      // Assuming the token is in responseData.token or responseData.data.token
-      // Please adjust if the actual response structure is different
       const token = responseData.token || responseData.data?.token;
 
       if (token) {
@@ -85,28 +83,30 @@ export default function AuthTokenPage() {
   };
   
   if (isAuthLoading || !isAuthenticated) {
-    return (
-      <AppLayout>
+     return (
+      <AppLayout pageTitle="Loading Auth Token...">
         <div className="flex h-full items-center justify-center">
           <Loader2 className="h-12 w-12 animate-spin text-primary" />
         </div>
       </AppLayout>
     );
   }
+  
+  const pageTitleString = "API Authentication Token";
 
   return (
-    <AppLayout>
+    <AppLayout pageTitle={pageTitleString}>
       <div className="space-y-6">
-        <div className="flex justify-between items-center">
-          <div className="flex items-center gap-2">
-            <KeyRound className="h-8 w-8 text-primary" />
-            <h1 className="text-3xl font-bold font-headline text-primary">Get API Authentication Token</h1>
-          </div>
-        </div>
+         {/* Page-specific sub-header, if needed, below AppLayout's global header */}
+         <div className="flex items-center gap-2">
+            <KeyRound className="h-6 w-6 text-muted-foreground" />
+            <span className="text-lg font-semibold">Configure API Access</span>
+         </div>
         <CardDescription>
           Use this page to obtain a bearer token from the API. The token will be stored in your browser's local storage and used for "Export Data" API calls.
         </CardDescription>
-        <Separator />
+        
+        {/* Separator is now handled by AppLayout after its global header elements */}
 
         <Card className="w-full max-w-lg mx-auto">
           <CardHeader>
