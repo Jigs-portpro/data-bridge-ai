@@ -4,7 +4,6 @@
 import { useAppContext } from '@/hooks/useAppContext';
 import { DataToolsSidebar } from '@/components/DataToolsSidebar';
 import { FileUploadButton } from '@/components/FileUploadButton';
-import { GoogleSheetInput } from '@/components/GoogleSheetInput';
 import { DataTable } from '@/components/DataTable';
 import { ChatPane } from '@/components/ChatPane';
 import { DataCorrectionDialog } from '@/components/dialogs/DataCorrectionDialog';
@@ -30,7 +29,6 @@ export function AppLayout() {
                 <h1 className="text-3xl font-bold font-headline text-primary">DataWise Dashboard</h1>
                 <div className="flex flex-col sm:flex-row items-center gap-2">
                   <FileUploadButton />
-                  <GoogleSheetInput />
                 </div>
               </div>
             </div>
