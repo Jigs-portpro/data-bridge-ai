@@ -31,7 +31,7 @@ interface SetupExportEntity extends Omit<ExportEntity, 'fields'> {
 }
 
 
-const fieldTypes: ExportEntityField['type'][] = ['string', 'number', 'boolean', 'email'];
+const fieldTypes: ExportEntityField['type'][] = ['string', 'number', 'boolean', 'email', 'date']; // Added 'date'
 
 export default function SetupPage() {
   const { isAuthenticated, isAuthLoading, showToast } = useAppContext();
@@ -44,10 +44,10 @@ export default function SetupPage() {
     // Deep copy initial config to avoid mutating the imported constant
     const initialSetupEntities: SetupExportEntity[] = JSON.parse(JSON.stringify(initialEntitiesConfig)).map((entityConf: ExportEntity, entityIdx: number) => ({
       ...entityConf,
-      internalId: `entity-${Date.now()}-${entityIdx}`,
+      internalId: `entity-${Date.now()}-${entityIdx}-${Math.random().toString(36).substring(2, 15)}`,
       fields: entityConf.fields.map((fieldConf: ExportEntityField, fieldIdx: number) => ({
         ...fieldConf,
-        internalId: `field-${Date.now()}-${entityIdx}-${fieldIdx}`,
+        internalId: `field-${Date.now()}-${entityIdx}-${fieldIdx}-${Math.random().toString(36).substring(2, 15)}`,
       })),
     }));
     setEntities(initialSetupEntities);
@@ -63,7 +63,7 @@ export default function SetupPage() {
   const handleAddEntity = useCallback(() => {
     setEntities(prev => {
       const newIndex = prev.length;
-      const newInternalId = `entity-${Date.now()}-${newIndex}`;
+      const newInternalId = `entity-${Date.now()}-${newIndex}-${Math.random().toString(36).substring(2, 15)}`;
       return [
         ...prev,
         {
@@ -97,7 +97,7 @@ export default function SetupPage() {
             fields: [
               ...e.fields,
               {
-                internalId: `field-${Date.now()}-${e.id}-${newFieldIndex}`,
+                internalId: `field-${Date.now()}-${e.id}-${newFieldIndex}-${Math.random().toString(36).substring(2, 15)}`,
                 name: `newApiField${newFieldIndex + 1}`, // This is the target API field name
                 required: false,
                 type: 'string',
@@ -142,12 +142,12 @@ export default function SetupPage() {
       // Strip internalId before generating JSON
       const entitiesForExport: ExportEntity[] = entities.map(({ internalId, fields, ...entityRest }) => ({
         ...entityRest,
-        id: entityRest.id,
+        id: entityRest.id, // Ensure id is correctly typed if it was Omit earlier
         fields: fields.map(({ internalId: fieldInternalId, ...fieldRest }) => fieldRest),
       }));
       const jsonString = JSON.stringify(entitiesForExport, null, 2);
       setGeneratedJson(jsonString);
-      showToast({ title: 'JSON Generated', description: 'Copy the JSON and update src/config/exportEntities.ts' });
+      showToast({ title: 'JSON Generated', description: 'Configuration ready. Follow instructions below to save.' });
     } catch (error) {
       showToast({ title: 'Error Generating JSON', description: `Could not serialize: ${error instanceof Error ? error.message : String(error)}`, variant: 'destructive' });
     }
@@ -172,17 +172,17 @@ export default function SetupPage() {
             <h1 className="text-3xl font-bold font-headline text-primary">Entity Configuration Setup</h1>
           </div>
           <Button onClick={handleAddEntity} size="sm">
-            <PlusCircle className="mr-2 h-4 w-4" /> Add New Entity
+            <PlusCircle className="mr-2 h-4 w-4" /> Add New Target Entity
           </Button>
         </div>
         <CardDescription className="flex-shrink-0">
-          Configure target entities for data export. Define their API endpoints and field schemas.
-          After changes, click "Generate JSON" and manually update <code>src/config/exportEntities.ts</code>.
+          Configure target entities for data export. Define their API endpoints and field schemas (name, type, required status).
+          After making changes, click "Generate JSON" and then **manually update the `src/config/exportEntities.ts` file** in your project with the generated content.
         </CardDescription>
         <Separator className="flex-shrink-0" />
 
         {entities.length === 0 && (
-          <p className="text-muted-foreground text-center py-8 flex-shrink-0">No entities. Click "Add New Entity" to start.</p>
+          <p className="text-muted-foreground text-center py-8 flex-shrink-0">No entities defined. Click "Add New Target Entity" to start.</p>
         )}
         
         <ScrollArea className="flex-grow min-h-0"> {/* Outer ScrollArea for the list of accordions */}
@@ -239,7 +239,7 @@ export default function SetupPage() {
                       </div>
                     </div>
                     <div>
-                      <Label htmlFor={`entity-url-${entity.internalId}`}>API URL</Label>
+                      <Label htmlFor={`entity-url-${entity.internalId}`}>Target API URL</Label>
                       <Input
                         id={`entity-url-${entity.internalId}`}
                         value={entity.url}
@@ -270,7 +270,7 @@ export default function SetupPage() {
                               </div>
                             <div className="grid grid-cols-1 gap-3">
                               <div>
-                                <Label htmlFor={`field-name-${field.internalId}`}>Field Name (Target API)</Label>
+                                <Label htmlFor={`field-name-${field.internalId}`}>Target API Field Name</Label>
                                 <Input
                                   id={`field-name-${field.internalId}`}
                                   value={field.name}
@@ -290,9 +290,9 @@ export default function SetupPage() {
                                       <SelectValue placeholder="Select type" />
                                   </SelectTrigger>
                                   <SelectContent>
-                                      {fieldTypes.map(type => (
-                                      <SelectItem key={type} value={type || 'string'}>
-                                          {type ? type.charAt(0).toUpperCase() + type.slice(1) : 'String'}
+                                      {fieldTypes.map(typeOption => (
+                                      <SelectItem key={typeOption || 'string'} value={typeOption || 'string'}>
+                                          {typeOption ? typeOption.charAt(0).toUpperCase() + typeOption.slice(1) : 'String'}
                                       </SelectItem>
                                       ))}
                                   </SelectContent>
@@ -304,7 +304,7 @@ export default function SetupPage() {
                                   checked={field.required || false}
                                   onCheckedChange={(checked) => handleFieldChange(entity.internalId, field.internalId, 'required', !!checked)}
                                 />
-                                <Label htmlFor={`field-required-${field.internalId}`}>Required Field</Label>
+                                <Label htmlFor={`field-required-${field.internalId}`}>Required in API</Label>
                               </div>
                             </div>
                           </div>
@@ -323,9 +323,12 @@ export default function SetupPage() {
           <div className="flex-shrink-0 pt-6">
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center"><Download className="mr-2 h-5 w-5"/>Generated JSON Configuration</CardTitle>
+                <CardTitle className="flex items-center"><Download className="mr-2 h-5 w-5"/>Save Configuration (Generate JSON)</CardTitle>
                 <CardDescription>
-                  Click to generate JSON. Copy and replace content of <code>src/config/exportEntities.ts</code>. Ensure variable name is <code>export const exportEntities: ExportEntity[] = ...</code>
+                  Click "Generate JSON for Config File". Then, **copy the entire text output** from the box below.
+                  Open the file <code>src/config/exportEntities.ts</code> in your project code.
+                  **Replace the existing array content** assigned to the <code>export const exportEntities: ExportEntity[] = ...;</code> line with your copied JSON.
+                  This is how your configuration is "saved" for the application to use.
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -336,7 +339,7 @@ export default function SetupPage() {
                   <Textarea
                     value={generatedJson}
                     readOnly
-                    rows={10} // Reduced rows for potentially less space needed if page scrolls
+                    rows={10}
                     className="mt-4 font-code text-xs bg-muted/50"
                     aria-label="Generated JSON configuration"
                   />

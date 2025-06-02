@@ -2,13 +2,14 @@
 export interface ExportEntityField {
   name: string; // Target API field name
   required?: boolean;
-  type?: 'string' | 'number' | 'boolean' | 'email'; // Add more types as needed
+  type?: 'string' | 'number' | 'boolean' | 'email' | 'date'; // Added 'date'
   // Future validation options:
   // minLength?: number;
   // maxLength?: number;
-  // pattern?: RegExp;
-  // minValue?: number;
-  // maxValue?: number;
+  // pattern?: RegExp; // For string, email
+  // minValue?: number; // For number, date (as timestamp)
+  // maxValue?: number; // For number, date (as timestamp)
+  // dateFormat?: string; // For date, if specific format is needed beyond ISO
 }
 
 export interface ExportEntity {
@@ -26,11 +27,11 @@ export const exportEntities: ExportEntity[] = [
     name: 'TMS Customer',
     url: 'https://new.dev.portpro.io/carrier/addTMSCustomer', // Ensure this is the correct endpoint
     fields: [
-      { name: 'customer_name', required: true, type: 'string' }, // This is the target API field name
+      { name: 'customer_name', required: true, type: 'string' },
       { name: 'email', required: true, type: 'email' },
       { name: 'phone', type: 'string' },
-      { name: 'address_line1', type: 'string' }, // Assuming 'Address' from source might map to this
-      // Add other fields relevant to TMS Customer (target API fields)
+      { name: 'address_line1', type: 'string' },
+      { name: 'registration_date', type: 'date', required: false },
     ],
   },
   {
@@ -42,34 +43,13 @@ export const exportEntities: ExportEntity[] = [
       { name: 'sku', required: true, type: 'string' },
       { name: 'price', type: 'number' },
       { name: 'stock_qty', type: 'number' },
-      // Add other fields relevant to Product List (target API fields)
+      { name: 'expiry_date', type: 'date' },
     ],
   },
-  // Add definitions for your other entities here, for example:
-  // {
-  //   id: 'trucks',
-  //   name: 'Trucks',
-  //   url: 'https://new.dev.portpro.io/carrier/addTrucks',
-  //   fields: [
-  //     { name: 'truck_identifier', required: true, type: 'string' },
-  //     { name: 'license_plate', required: true, type: 'string' },
-  //     { name: 'capacity_tons', type: 'number' },
-  //   ],
-  // },
-  // ... and so on for all entities
 ];
 
-// To add more entities, copy the structure above and fill in the details.
-// For example:
-/*
- {
-    id: 'newEntityId', // must be unique
-    name: 'User Friendly Name for New Entity',
-    url: 'https://your.api.endpoint/for/newEntity',
-    fields: [
-      { name: 'targetApiFieldName', required: true, type: 'string' }, // This is the field name your API expects
-      { name: 'anotherTargetApiField', type: 'number' },
-      // ... other fields
-    ]
-  }
-*/
+// To add more entities or update existing ones, modify the array above.
+// You can also use the Setup page in the application to generate this JSON structure,
+// then copy it from the "Generated JSON Configuration" textarea on that page
+// and paste it here, replacing the existing array content.
+// Make sure the export line remains: export const exportEntities: ExportEntity[] = [ ...your content... ];
