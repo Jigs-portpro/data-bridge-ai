@@ -31,6 +31,7 @@ import {
   SidebarGroupContent
 } from '@/components/ui/sidebar';
 import Link from 'next/link';
+import { cn } from '@/lib/utils';
 
 
 const toolConfig = [
@@ -45,7 +46,8 @@ export function DataToolsSidebar() {
   const { openDialog, data, isAuthenticated, logout } = useAppContext();
   const isDataLoaded = data.length > 0;
 
-  const isExportDataDisabled = !isDataLoaded || !isAuthenticated;
+  const isAIDisabled = !isDataLoaded || !isAuthenticated;
+  const isExportDataDisabled = !isDataLoaded || !isAuthenticated; 
 
   return (
     <Sidebar collapsible="icon" variant="sidebar" className="border-r">
@@ -67,7 +69,7 @@ export function DataToolsSidebar() {
                             <SidebarMenuItem key={tool.id}>
                             <SidebarMenuButton
                                 onClick={() => openDialog(tool.id)}
-                                disabled={!isDataLoaded || !isAuthenticated}
+                                disabled={isAIDisabled}
                                 tooltip={{children: tool.name, side:"right", align:"center"}}
                                 className="justify-start"
                             >
@@ -96,15 +98,17 @@ export function DataToolsSidebar() {
                                 }}
                                 aria-disabled={isExportDataDisabled}
                                 tabIndex={isExportDataDisabled ? -1 : undefined}
-                                className={isExportDataDisabled ? 'pointer-events-none opacity-50' : ''}
                             >
                                 <SidebarMenuButton
-                                    disabled={isExportDataDisabled}
+                                    disabled={isExportDataDisabled} 
                                     tooltip={{children: "Prepare & Export Data", side:"right", align:"center"}}
-                                    className="justify-start"
+                                    className={cn(
+                                        "justify-start w-full", 
+                                        isExportDataDisabled && "opacity-50 pointer-events-none"
+                                    )}
                                     asChild
                                 >
-                                   <a>
+                                   <a> 
                                     <Send className="h-5 w-5" />
                                     <span className="group-data-[collapsible=icon]:hidden">Export Data</span>
                                    </a>
@@ -120,11 +124,15 @@ export function DataToolsSidebar() {
                 <SidebarGroupContent>
                     <SidebarMenu>
                         <SidebarMenuItem>
-                            <Link href="/setup" passHref legacyBehavior>
+                            <Link href="/setup" passHref legacyBehavior
+                                onClick={(e) => { if (!isAuthenticated) e.preventDefault();}}
+                                aria-disabled={!isAuthenticated}
+                                tabIndex={!isAuthenticated ? -1 : undefined}
+                            >
                                 <SidebarMenuButton
                                     disabled={!isAuthenticated}
                                     tooltip={{children: "Setup Entities", side:"right", align:"center"}}
-                                    className="justify-start"
+                                    className={cn("justify-start w-full", !isAuthenticated && "opacity-50 pointer-events-none")}
                                     asChild
                                 >
                                    <a>
@@ -135,11 +143,15 @@ export function DataToolsSidebar() {
                             </Link>
                         </SidebarMenuItem>
                          <SidebarMenuItem>
-                            <Link href="/auth-token" passHref legacyBehavior>
+                            <Link href="/auth-token" passHref legacyBehavior
+                                onClick={(e) => { if (!isAuthenticated) e.preventDefault();}}
+                                aria-disabled={!isAuthenticated}
+                                tabIndex={!isAuthenticated ? -1 : undefined}
+                            >
                                 <SidebarMenuButton
                                     disabled={!isAuthenticated}
                                     tooltip={{children: "API Auth Token", side:"right", align:"center"}}
-                                    className="justify-start"
+                                    className={cn("justify-start w-full", !isAuthenticated && "opacity-50 pointer-events-none")}
                                     asChild
                                 >
                                    <a>
