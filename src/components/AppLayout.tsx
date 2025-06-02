@@ -10,15 +10,19 @@ import { DataEnrichmentDialog } from '@/components/dialogs/DataEnrichmentDialog'
 import { ColumnReorderDialog } from '@/components/dialogs/ColumnReorderDialog';
 import { AnomalyReportDialog } from '@/components/dialogs/AnomalyReportDialog';
 import { DuplicateDetectionDialog } from '@/components/dialogs/DuplicateDetectionDialog';
-import { ExportDataDialog } from '@/components/dialogs/ExportDataDialog';
+// Removed: import { ExportDataDialog } from '@/components/dialogs/ExportDataDialog';
 import { SidebarProvider, SidebarInset, SidebarTrigger } from '@/components/ui/sidebar';
 import { Separator } from '@/components/ui/separator';
 import { Button } from '@/components/ui/button';
-import { Send, Building2 } from 'lucide-react'; 
+import { Send, Building2, ExternalLink } from 'lucide-react'; 
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+
 
 export function AppLayout({ children, pageTitle }: { children?: React.ReactNode; pageTitle: string }) {
   const { activeDialog, openDialog, data, isAuthenticated, currentCompanyName } = useAppContext();
   const isDataLoaded = data.length > 0;
+  const router = useRouter();
 
   return (
     <SidebarProvider defaultOpen={true}>
@@ -44,11 +48,14 @@ export function AppLayout({ children, pageTitle }: { children?: React.ReactNode;
                       <FileUploadButton />
                       <Button
                         variant="outline"
-                        onClick={() => openDialog('export')}
+                        onClick={() => router.push('/export-data')} // Navigate to page
                         disabled={!isDataLoaded}
+                        asChild
                       >
-                        <Send className="mr-2 h-4 w-4" />
-                        Export Data
+                        <Link href="/export-data">
+                           <Send className="mr-2 h-4 w-4" />
+                           Export Data
+                        </Link>
                       </Button>
                     </div>
                   </div>
@@ -82,7 +89,7 @@ export function AppLayout({ children, pageTitle }: { children?: React.ReactNode;
       {activeDialog === 'reorder' && <ColumnReorderDialog />}
       {activeDialog === 'anomaly' && <AnomalyReportDialog />}
       {activeDialog === 'duplicate' && <DuplicateDetectionDialog />}
-      {activeDialog === 'export' && <ExportDataDialog />}
+      {/* {activeDialog === 'export' && <ExportDataDialog />} Removed */}
     </SidebarProvider>
   );
 }

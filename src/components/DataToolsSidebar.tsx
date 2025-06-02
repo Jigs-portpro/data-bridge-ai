@@ -13,7 +13,8 @@ import {
   Github,
   LogOut,
   Settings,
-  KeyRound, // Added KeyRound icon
+  KeyRound,
+  Send, // Added Send icon for export
 } from 'lucide-react';
 import {
   Sidebar,
@@ -106,6 +107,21 @@ export function DataToolsSidebar() {
                                    <a>
                                     <KeyRound className="h-5 w-5" />
                                     <span className="group-data-[collapsible=icon]:hidden">API Auth</span>
+                                   </a>
+                                </SidebarMenuButton>
+                            </Link>
+                        </SidebarMenuItem>
+                         <SidebarMenuItem>
+                            <Link href="/export-data" passHref legacyBehavior>
+                                <SidebarMenuButton
+                                    disabled={!isDataLoaded || !isAuthenticated}
+                                    tooltip={{children: "Export Data", side:"right", align:"center"}}
+                                    className="justify-start"
+                                    asChild
+                                >
+                                   <a>
+                                    <Send className="h-5 w-5" />
+                                    <span className="group-data-[collapsible=icon]:hidden">Export Data</span>
                                    </a>
                                 </SidebarMenuButton>
                             </Link>
