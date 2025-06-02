@@ -178,8 +178,30 @@ export default function SetupPage() {
                         <ChevronsUpDown className="h-5 w-5 text-muted-foreground group-hover:text-primary transition-colors" />
                         <span className="text-lg font-semibold text-primary">{entity.name || "Untitled Entity"}</span>
                     </div>
-                    <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); handleRemoveEntity(entity.internalId);}} className="text-destructive hover:bg-destructive/10">
+                    <Button
+                      asChild
+                      variant="ghost"
+                      size="icon"
+                      className="text-destructive hover:bg-destructive/10"
+                    >
+                      <div
+                        role="button"
+                        tabIndex={0}
+                        aria-label={`Remove entity ${entity.name || "Untitled Entity"}`}
+                        onClick={(e) => {
+                           e.stopPropagation(); // Prevent accordion toggle
+                           handleRemoveEntity(entity.internalId);
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            e.stopPropagation(); // Prevent accordion toggle
+                            handleRemoveEntity(entity.internalId);
+                          }
+                        }}
+                      >
                         <Trash2 className="h-4 w-4" />
+                      </div>
                     </Button>
                 </div>
               </AccordionTrigger>
@@ -326,3 +348,4 @@ export default function SetupPage() {
     </AppLayout>
   );
 }
+
