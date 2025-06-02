@@ -38,7 +38,6 @@ export function GoogleSheetInput() {
     setIsLoading(true);
     clearChatHistory();
     
-    // Make sure gid is not null before using it in the URL
     const effectiveGid = gid ?? '0';
     const csvExportUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv&gid=${effectiveGid}`;
 
@@ -51,7 +50,6 @@ export function GoogleSheetInput() {
       const parsed = parseCSV(csvText);
       
       setData(parsed.rows);
-      // Try to derive a filename from the URL or use a generic one
       const urlParts = sheetUrl.split('/');
       const potentialName = urlParts.find(part => part === sheetId) ? `Sheet - ${sheetId.substring(0,10)}...` : 'Google Sheet';
       setFileName(potentialName);
@@ -60,12 +58,13 @@ export function GoogleSheetInput() {
         title: 'Google Sheet Loaded',
         description: 'Data from Google Sheet processed successfully.',
       });
+      setSheetUrl(''); // Clear input only on success
     } catch (error) {
-      let description = 'Could not load or process the Google Sheet. Make sure it is public (e.g., "Anyone with the link can view") and the URL is correct.';
+      let description = 'Could not load or process the Google Sheet. Make sure it is public (e.g., "Anyone with the link can view" or "Published to the web") and the URL is correct.';
       if (error instanceof Error) {
-        if (error.message.startsWith('Failed to fetch sheet:')) { // Specific error from response.ok check
+        if (error.message.startsWith('Failed to fetch sheet:')) { 
             description = `Error: ${error.message}. Please check the URL and sheet permissions.`;
-        } else if (error.message === 'Failed to fetch') { // Generic network error
+        } else if (error.message === 'Failed to fetch') { 
             description += ' This can also be due to network issues or CORS restrictions preventing access from your browser.';
         }
       }
@@ -75,11 +74,10 @@ export function GoogleSheetInput() {
         description: description,
         variant: 'destructive',
       });
-      setData([]);
-      setFileName(null);
+      // setData([]); // Optionally clear data on error, or leave existing data
+      // setFileName(null); // Optionally clear filename on error
     } finally {
       setIsLoading(false);
-      setSheetUrl(''); // Clear input after attempt
     }
   };
   
@@ -109,3 +107,4 @@ export function GoogleSheetInput() {
     </div>
   );
 }
+
