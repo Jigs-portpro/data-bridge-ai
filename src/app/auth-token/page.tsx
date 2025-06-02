@@ -8,8 +8,10 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { useAppContext } from '@/hooks/useAppContext';
-import { KeyRound, Loader2, Trash2 } from 'lucide-react';
+import { KeyRound, Loader2, Trash2, Eye } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
+import { Textarea } from '@/components/ui/textarea';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 const AUTH_TOKEN_STORAGE_KEY = 'datawiseAuthToken';
 
@@ -18,6 +20,7 @@ export default function AuthTokenPage() {
   const [email, setEmail] = useState('jthurston@centraltransport.com'); // Pre-fill from cURL
   const [password, setPassword] = useState(''); // Pre-fill from cURL
   const [storedToken, setStoredToken] = useState<string | null>(null);
+  const [fullApiResponse, setFullApiResponse] = useState<any | null>(null);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -28,6 +31,7 @@ export default function AuthTokenPage() {
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setIsLoading(true);
+    setFullApiResponse(null); // Clear previous response
     try {
       const response = await fetch('https://api.axle.network/login', {
         method: 'POST',
@@ -45,6 +49,7 @@ export default function AuthTokenPage() {
       });
 
       const responseData = await response.json();
+      setFullApiResponse(responseData); // Store the full response
 
       if (!response.ok) {
         throw new Error(responseData.message || `API Error: ${response.status}`);
@@ -57,7 +62,7 @@ export default function AuthTokenPage() {
             localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, token);
         }
         setStoredToken(token);
-        showToast({ title: 'Success', description: 'Authentication token obtained and stored.' });
+        showToast({ title: 'Success', description: 'Token obtained. Full API response displayed below.' });
       } else {
         throw new Error('Token not found in API response.');
       }
@@ -79,7 +84,8 @@ export default function AuthTokenPage() {
         localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
     }
     setStoredToken(null);
-    showToast({ title: 'Token Cleared', description: 'Authentication token removed from local storage.' });
+    setFullApiResponse(null);
+    showToast({ title: 'Token Cleared', description: 'Authentication token and API response removed.' });
   };
   
   if (isAuthLoading || !isAuthenticated) {
@@ -97,21 +103,18 @@ export default function AuthTokenPage() {
   return (
     <AppLayout pageTitle={pageTitleString}>
       <div className="space-y-6">
-         {/* Page-specific sub-header, if needed, below AppLayout's global header */}
          <div className="flex items-center gap-2">
             <KeyRound className="h-6 w-6 text-muted-foreground" />
             <span className="text-lg font-semibold">Configure API Access</span>
          </div>
         <CardDescription>
-          Use this page to obtain a bearer token from the API. The token will be stored in your browser's local storage and used for "Export Data" API calls.
+          Use this page to obtain a bearer token from the API. The token will be stored in your browser's local storage and used for "Export Data" API calls. The full API response will also be displayed for inspection.
         </CardDescription>
         
-        {/* Separator is now handled by AppLayout after its global header elements */}
-
         <Card className="w-full max-w-lg mx-auto">
           <CardHeader>
             <CardTitle>Login to API</CardTitle>
-            <CardDescription>Enter your API credentials to get a bearer token.</CardDescription>
+            <CardDescription>Enter your API credentials to get a bearer token and view the full response.</CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-6">
@@ -141,7 +144,7 @@ export default function AuthTokenPage() {
               </div>
               <Button type="submit" className="w-full" disabled={isLoading}>
                 {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                Get/Refresh Token
+                Get/Refresh Token & View Response
               </Button>
             </form>
           </CardContent>
@@ -156,18 +159,40 @@ export default function AuthTokenPage() {
               <p className="text-sm text-green-600">A token is currently stored in local storage.</p>
               <Input
                 type="text"
-                value={storedToken ? `Bearer ${storedToken.substring(0, 20)}...` : 'No token stored'}
+                value={storedToken ? `Bearer ${storedToken.substring(0, 20)}... (click clear to see full value if re-fetched)` : 'No token stored'}
                 readOnly
                 className="font-mono text-xs"
               />
                <Button onClick={handleClearToken} variant="outline" className="w-full" disabled={isLoading}>
-                <Trash2 className="mr-2 h-4 w-4" /> Clear Stored Token
+                <Trash2 className="mr-2 h-4 w-4" /> Clear Stored Token & API Response
               </Button>
             </CardContent>
           </Card>
         )}
          {!storedToken && !isLoading && (
             <p className="text-center text-muted-foreground mt-6">No token is currently stored. Use the form above to obtain one.</p>
+        )}
+
+        {fullApiResponse && (
+          <Card className="w-full max-w-2xl mx-auto mt-6">
+            <CardHeader>
+              <CardTitle className="flex items-center">
+                <Eye className="mr-2 h-5 w-5" />
+                Full API Response
+              </CardTitle>
+              <CardDescription>This is the complete JSON response received from the authentication API.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ScrollArea className="h-72">
+                <Textarea
+                  value={JSON.stringify(fullApiResponse, null, 2)}
+                  readOnly
+                  className="font-mono text-xs bg-muted/30"
+                  rows={15}
+                />
+              </ScrollArea>
+            </CardContent>
+          </Card>
         )}
       </div>
     </AppLayout>
