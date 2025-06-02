@@ -20,7 +20,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useAppContext } from '@/hooks/useAppContext';
-import type { ExportEntity, ExportEntityField } from '@/config/exportEntities'; // Only import types
+import type { ExportEntity, ExportEntityField, ExportConfig } from '@/config/exportEntities';
 import { Send, AlertTriangle, Loader2 } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -34,15 +34,25 @@ const isValidEmail = (email: string): boolean => {
 
 const isValidDateString = (dateStr: string): boolean => {
   if (!dateStr || typeof dateStr !== 'string') return false;
-  if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/) || dateStr.match(/^\d{1,2}\/\d{1,2}\/\d{4}$/) || dateStr.match(/^\d{1,2}-\d{1,2}-\d{4}$/)) {
-     const parsed = new Date(dateStr);
-     return isValid(parsed);
+  // Try common formats first
+  if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) { // YYYY-MM-DD
+     const parsed = new Date(dateStr + "T00:00:00Z"); // Assume UTC if no timezone
+     return isValid(parsed) && parsed.toISOString().startsWith(dateStr);
   }
+  // MM/DD/YYYY or MM-DD-YYYY
+  const commonFormatMatch = dateStr.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+  if (commonFormatMatch) {
+    const month = parseInt(commonFormatMatch[1], 10);
+    const day = parseInt(commonFormatMatch[2], 10);
+    const year = parseInt(commonFormatMatch[3], 10);
+    if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+        const parsed = new Date(year, month -1, day); // Month is 0-indexed
+        return isValid(parsed) && parsed.getFullYear() === year && parsed.getMonth() === month -1 && parsed.getDate() === day;
+    }
+  }
+  // Fallback to parseISO for full ISO strings or other complex cases
   const parsedISO = parseISO(dateStr);
-  if (isValid(parsedISO)) {
-    return dateStr.length >= 8 && (dateStr.includes('-') || dateStr.includes('/'));
-  }
-  return false;
+  return isValid(parsedISO);
 };
 
 const AUTH_TOKEN_STORAGE_KEY = 'datawiseAuthToken';
@@ -50,24 +60,23 @@ const AUTH_TOKEN_STORAGE_KEY = 'datawiseAuthToken';
 
 export function ExportDataDialog() {
   const {
-    data: appData, 
+    data: appData,
     activeDialog,
     closeDialog,
     showToast,
-    isLoading: appContextIsLoading, // Renamed to avoid conflict
-    setIsLoading: setAppContextIsLoading, // Renamed
-    columns: appColumns, 
+    isLoading: appContextIsLoading,
+    setIsLoading: setAppContextIsLoading,
+    columns: appColumns,
   } = useAppContext();
 
-  const [entitiesConfig, setEntitiesConfig] = useState<ExportEntity[]>([]);
+  const [exportConfig, setExportConfig] = useState<ExportConfig | null>(null);
   const [isFetchingConfig, setIsFetchingConfig] = useState(false);
   const [selectedEntityId, setSelectedEntityId] = useState<string>('');
   const [validationMessages, setValidationMessages] = useState<string[]>([]);
   const [fieldMappings, setFieldMappings] = useState<Record<string, string>>({});
-  const [isExporting, setIsExporting] = useState(false); // Dialog specific loading state
+  const [isExporting, setIsExporting] = useState(false);
 
   const isLoading = appContextIsLoading || isFetchingConfig || isExporting;
-
 
   const fetchEntitiesConfig = useCallback(async () => {
     if (activeDialog !== 'export') return;
@@ -75,20 +84,19 @@ export function ExportDataDialog() {
     try {
       const response = await fetch('/api/export-entities');
       if (!response.ok) throw new Error('Failed to fetch entities configuration');
-      const data: ExportEntity[] = await response.json();
-      setEntitiesConfig(data);
-      if (data.length > 0 && !selectedEntityId) {
-        setSelectedEntityId(data[0].id);
-      } else if (data.length > 0 && selectedEntityId && !data.find(e => e.id === selectedEntityId)) {
-        // If current selectedEntityId is no longer valid, reset to first
-        setSelectedEntityId(data[0].id);
-      } else if (data.length === 0) {
-        setSelectedEntityId(''); // No entities available
+      const config: ExportConfig = await response.json();
+      setExportConfig(config);
+      if (config.entities.length > 0 && !selectedEntityId) {
+        setSelectedEntityId(config.entities[0].id);
+      } else if (config.entities.length > 0 && selectedEntityId && !config.entities.find(e => e.id === selectedEntityId)) {
+        setSelectedEntityId(config.entities[0].id);
+      } else if (config.entities.length === 0) {
+        setSelectedEntityId('');
       }
     } catch (error) {
       console.error("Error fetching entities config:", error);
       showToast({ title: "Config Error", description: "Could not load export entities configuration.", variant: "destructive" });
-      setEntitiesConfig([]);
+      setExportConfig({ baseUrl: '', entities: [] });
       setSelectedEntityId('');
     } finally {
       setIsFetchingConfig(false);
@@ -98,7 +106,7 @@ export function ExportDataDialog() {
   useEffect(() => {
     fetchEntitiesConfig();
   }, [fetchEntitiesConfig]);
-  
+
   useEffect(() => {
     if (activeDialog !== 'export') {
       setValidationMessages([]);
@@ -106,13 +114,13 @@ export function ExportDataDialog() {
   }, [activeDialog]);
 
    useEffect(() => {
-    if (activeDialog === 'export' && selectedEntityId && entitiesConfig.length > 0) {
-      const entityConfig = entitiesConfig.find(e => e.id === selectedEntityId);
+    if (activeDialog === 'export' && selectedEntityId && exportConfig?.entities.length) {
+      const entityConfig = exportConfig.entities.find(e => e.id === selectedEntityId);
       const initialMappings: Record<string, string> = {};
       if (entityConfig) {
         entityConfig.fields.forEach(targetField => {
           const targetFieldNameNormalized = targetField.name.toLowerCase().replace(/[\s_]+/g, '');
-          const matchingSourceColumn = appColumns.find(sc => 
+          const matchingSourceColumn = appColumns.find(sc =>
             sc.toLowerCase().replace(/[\s_]+/g, '') === targetFieldNameNormalized
           );
           initialMappings[targetField.name] = matchingSourceColumn || '';
@@ -121,12 +129,10 @@ export function ExportDataDialog() {
       setFieldMappings(initialMappings);
       setValidationMessages([]);
     } else if (activeDialog === 'export' && !selectedEntityId) {
-      // Clear mappings if no entity is selected
       setFieldMappings({});
       setValidationMessages([]);
     }
-   }, [selectedEntityId, appColumns, activeDialog, entitiesConfig]);
-
+   }, [selectedEntityId, appColumns, activeDialog, exportConfig]);
 
   const handleMappingChange = (targetFieldName: string, sourceColumnName: string) => {
     setFieldMappings(prev => ({ ...prev, [targetFieldName]: sourceColumnName }));
@@ -137,13 +143,13 @@ export function ExportDataDialog() {
     const errors: string[] = [];
     entityFields.forEach(targetField => {
       const sourceColumnName = fieldMappings[targetField.name];
-      
+
       if (targetField.required && !sourceColumnName) {
         errors.push(`Row ${rowIndex + 1}, Target "${targetField.name}": required by API but not mapped.`);
         return;
       }
       if (!sourceColumnName) return;
-      
+
       const value = row[sourceColumnName];
       const stringValue = (value === null || value === undefined) ? '' : String(value).trim();
 
@@ -156,10 +162,10 @@ export function ExportDataDialog() {
           case 'string':
           case 'email':
             if (targetField.minLength !== undefined && stringValue.length < targetField.minLength) {
-              errors.push(`Row ${rowIndex + 1}, "${targetField.name}" (from "${sourceColumnName}"): min length ${targetField.minLength}, got ${stringValue.length}.`);
+              errors.push(`Row ${rowIndex + 1}, "${targetField.name}" (from "${sourceColumnName}"): min length ${targetField.minLength}, got ${stringValue.length}. Value: "${stringValue.substring(0,50)}"`);
             }
             if (targetField.maxLength !== undefined && stringValue.length > targetField.maxLength) {
-              errors.push(`Row ${rowIndex + 1}, "${targetField.name}" (from "${sourceColumnName}"): max length ${targetField.maxLength}, got ${stringValue.length}.`);
+              errors.push(`Row ${rowIndex + 1}, "${targetField.name}" (from "${sourceColumnName}"): max length ${targetField.maxLength}, got ${stringValue.length}. Value: "${stringValue.substring(0,50)}"`);
             }
             if (targetField.pattern) {
               try {
@@ -204,9 +210,8 @@ export function ExportDataDialog() {
     return errors;
   }, [fieldMappings]);
 
-
   const handleExportData = async () => {
-    if (!selectedEntityId) {
+    if (!selectedEntityId || !exportConfig) {
       showToast({ title: 'Select Target Entity', description: 'Please select a target entity.', variant: 'destructive' });
       return;
     }
@@ -215,19 +220,19 @@ export function ExportDataDialog() {
       return;
     }
 
-    const selectedEntity = entitiesConfig.find(e => e.id === selectedEntityId);
+    const selectedEntity = exportConfig.entities.find(e => e.id === selectedEntityId);
     if (!selectedEntity) {
       showToast({ title: 'Target Entity Not Found', description: 'Config for selected entity is missing.', variant: 'destructive' });
       return;
     }
 
     setIsExporting(true);
-    setAppContextIsLoading(true); // Use the context's loading state as well
-    setValidationMessages([]); 
+    setAppContextIsLoading(true);
+    setValidationMessages([]);
 
     let allValidationErrors: string[] = [];
     appData.forEach((row, index) => {
-      if (allValidationErrors.length < 100) {
+      if (allValidationErrors.length < 100) { // Limit number of errors to process/display for performance
         const rowErrors = validateRow(row, index, selectedEntity.fields);
         allValidationErrors = [...allValidationErrors, ...rowErrors];
       }
@@ -265,14 +270,15 @@ export function ExportDataDialog() {
               const num = parseFloat(stringValue);
               valueToTransform = isNaN(num) ? null : num;
            } else if (targetField.type === 'date' && stringValue !== '') {
-             valueToTransform = stringValue;
+             valueToTransform = stringValue; // API should handle date string format
            } else if (stringValue === '' && !targetField.required) {
-             valueToTransform = null;
+             valueToTransform = null; // Send null for empty non-required fields
            } else {
-             valueToTransform = stringValue;
+             valueToTransform = stringValue; // Default to string
            }
            transformedRow[targetField.name] = valueToTransform;
         } else if (targetField.required) {
+          // This case should ideally be caught by mapping validation, but as a fallback:
           transformedRow[targetField.name] = null;
         }
       });
@@ -295,12 +301,15 @@ export function ExportDataDialog() {
         showToast({ title: 'Auth Token Missing', description: 'No API auth token found. Exporting without authentication.', variant: 'destructive' });
     }
 
+    const fullApiUrl = (exportConfig.baseUrl.endsWith('/') ? exportConfig.baseUrl.slice(0, -1) : exportConfig.baseUrl) +
+                       (selectedEntity.url.startsWith('/') ? selectedEntity.url : '/' + selectedEntity.url);
+
     try {
-      console.log(`Simulating export to: ${selectedEntity.url}`);
+      console.log(`Simulating export to: ${fullApiUrl}`);
       console.log('Request Headers:', requestHeaders);
       console.log('Export Payload:', JSON.stringify(payload, null, 2));
-      
-      // const response = await fetch(selectedEntity.url, {
+
+      // const response = await fetch(fullApiUrl, {
       //   method: 'POST',
       //   headers: requestHeaders,
       //   body: JSON.stringify(payload),
@@ -310,8 +319,8 @@ export function ExportDataDialog() {
       //   throw new Error(errorData.message || `API Error: ${response.status}`);
       // }
       // const responseData = await response.json();
-      
-      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate network delay
 
       showToast({ title: 'Export "Simulated" Successfully', description: `Data for "${selectedEntity.name}" prepared. Check browser console.` });
     } catch (error: any) {
@@ -324,20 +333,21 @@ export function ExportDataDialog() {
     }
   };
 
-  const selectedEntityConfig = entitiesConfig.find(e => e.id === selectedEntityId);
-  const isExportDisabled = isLoading || 
-                           !selectedEntityId || 
+  const selectedEntityConfig = exportConfig?.entities.find(e => e.id === selectedEntityId);
+  const isExportDisabled = isLoading ||
+                           !selectedEntityId ||
+                           !exportConfig ||
+                           exportConfig.entities.length === 0 ||
                            appData.length === 0 ||
                            (selectedEntityConfig?.fields.some(f => f.required && (!fieldMappings[f.name] || fieldMappings[f.name] === '')) ?? true);
 
-
   const handleDialogClose = () => {
-    if (!isLoading) { // Only close if not in a loading state
+    if (!isLoading) {
       closeDialog();
     }
   };
 
-  if (isFetchingConfig && activeDialog === 'export') {
+   if (isFetchingConfig && activeDialog === 'export') {
      return (
       <Dialog open={true} onOpenChange={(isOpen) => { if (!isOpen) handleDialogClose(); }}>
         <DialogContent className="sm:max-w-2xl">
@@ -360,27 +370,26 @@ export function ExportDataDialog() {
     );
   }
 
-
   return (
     <Dialog open={activeDialog === 'export'} onOpenChange={(isOpen) => { if (!isOpen) handleDialogClose(); }}>
       <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle className="font-headline flex items-center"><Send className="mr-2 h-5 w-5 text-primary"/>Export Data</DialogTitle>
           <DialogDescription>
-            Select target entity, map source columns to target API fields, and export. Data will be validated.
+            Select target entity, map source columns to target API fields, and export. Data will be validated against rules defined in Setup.
           </DialogDescription>
         </DialogHeader>
-        
+
         <div className="grid gap-6 py-4">
           <div className="grid grid-cols-4 items-center gap-4">
             <Label htmlFor="entity-select" className="text-right col-span-1">Target Entity</Label>
-            <Select value={selectedEntityId} onValueChange={setSelectedEntityId} disabled={isLoading || entitiesConfig.length === 0}>
+            <Select value={selectedEntityId} onValueChange={setSelectedEntityId} disabled={isLoading || !exportConfig?.entities.length}>
               <SelectTrigger id="entity-select" className="col-span-3">
-                <SelectValue placeholder={entitiesConfig.length === 0 ? "No entities configured" : "Select an entity"} />
+                <SelectValue placeholder={!exportConfig || exportConfig.entities.length === 0 ? "No entities configured" : "Select an entity"} />
               </SelectTrigger>
               <SelectContent>
-                {entitiesConfig.length === 0 && <SelectItem value="no-entities" disabled>No entities configured</SelectItem>}
-                {entitiesConfig.map((entity) => (<SelectItem key={entity.id} value={entity.id}>{entity.name}</SelectItem>))}
+                {(!exportConfig || exportConfig.entities.length === 0) && <SelectItem value="no-entities" disabled>No entities configured</SelectItem>}
+                {exportConfig?.entities.map((entity) => (<SelectItem key={entity.id} value={entity.id}>{entity.name}</SelectItem>))}
               </SelectContent>
             </Select>
           </div>
@@ -388,7 +397,7 @@ export function ExportDataDialog() {
           {selectedEntityConfig && (
             <div className="border rounded-md p-4">
               <h4 className="text-md font-semibold mb-3">Map Source Columns to "{selectedEntityConfig.name}" Target API Fields:</h4>
-              <ScrollArea className="max-h-60"> 
+              <ScrollArea className="max-h-60">
                 <div className="space-y-3 pr-3">
                   {selectedEntityConfig.fields.map(targetField => (
                     <div key={targetField.name} className="grid grid-cols-2 gap-x-4 gap-y-1 items-center">
@@ -411,10 +420,10 @@ export function ExportDataDialog() {
                <p className="text-xs text-muted-foreground mt-2"><span className="text-destructive">*</span> Target API field is required.</p>
             </div>
           )}
-          {!selectedEntityConfig && entitiesConfig.length > 0 && (
+          {!selectedEntityConfig && exportConfig?.entities.length && (
              <p className="text-sm text-muted-foreground text-center">Select an entity to configure field mappings.</p>
           )}
-           {!selectedEntityConfig && entitiesConfig.length === 0 && !isFetchingConfig && (
+          {(!exportConfig || exportConfig.entities.length === 0) && !isFetchingConfig && (
              <p className="text-sm text-destructive text-center">No export entities are configured. Please add them on the Setup page.</p>
           )}
         </div>

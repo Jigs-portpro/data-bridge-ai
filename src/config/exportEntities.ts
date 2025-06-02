@@ -16,13 +16,24 @@ export interface ExportEntityField {
 
 export interface ExportEntity {
   id: string; // Unique identifier for the entity
-  name:string; // User-friendly name for the dropdown
-  url: string; // API endpoint URL
+  name: string; // User-friendly name for the dropdown
+  url: string; // API endpoint PATH (relative to baseUrl)
   fields: ExportEntityField[];
 }
 
-// The actual array of entities is no longer defined here.
+export interface ExportConfig {
+  baseUrl: string;
+  entities: ExportEntity[];
+}
+
+// The actual configuration is no longer defined here.
 // It's loaded from 'exportEntities.json' via an API call.
 // You can manage 'exportEntities.json' using the Setup page in the application.
 // The Setup page will fetch the current config and allow you to save changes back to the JSON file.
-export const exportEntities: ExportEntity[] = []; // This is now just a placeholder for type inference
+
+// Default empty config for type inference or initial setup if needed elsewhere,
+// but the primary source is the JSON file.
+export const defaultConfig: ExportConfig = {
+  baseUrl: "https://api.example.com/v1",
+  entities: []
+};
