@@ -39,12 +39,16 @@ const isValidDateString = (dateStr: string): boolean => {
      const parsed = new Date(dateStr);
      return isValid(parsed);
   }
-  const parsedISO = parseISO(dateStr);
+  const parsedISO = parseISO(dateStr); // parseISO handles more flexible ISO-like strings
+  // Check if valid and original string has characteristics of a date (e.g. length, separators)
   if (isValid(parsedISO)) {
+    // Ensure it's not just a number that parseISO might interpret as milliseconds from epoch
     return dateStr.length >= 8 && (dateStr.includes('-') || dateStr.includes('/'));
   }
   return false;
 };
+
+const AUTH_TOKEN_STORAGE_KEY = 'datawiseAuthToken';
 
 
 export function ExportDataDialog() {
@@ -66,30 +70,34 @@ export function ExportDataDialog() {
       setSelectedEntityId(exportEntities[0].id);
     }
      if (activeDialog !== 'export') {
-      setValidationMessages([]);
+      setValidationMessages([]); // Clear messages when dialog is not for export or closed
     }
-  }, [activeDialog]);
+  }, [activeDialog]); // Removed exportEntities from deps, only depends on dialog visibility
 
-  useEffect(() => {
+  // Effect to initialize mappings when selectedEntityId or appColumns change while dialog is open
+   useEffect(() => {
     if (activeDialog === 'export' && selectedEntityId) {
       const entityConfig = exportEntities.find(e => e.id === selectedEntityId);
       const initialMappings: Record<string, string> = {};
       if (entityConfig) {
         entityConfig.fields.forEach(targetField => {
+          // Case-insensitive and ignore space/_ matching for initial mapping
+          const targetFieldNameNormalized = targetField.name.toLowerCase().replace(/[\s_]+/g, '');
           const matchingSourceColumn = appColumns.find(sc => 
-            sc.toLowerCase().replace(/[\s_]+/g, '') === targetField.name.toLowerCase().replace(/[\s_]+/g, '')
+            sc.toLowerCase().replace(/[\s_]+/g, '') === targetFieldNameNormalized
           );
           initialMappings[targetField.name] = matchingSourceColumn || '';
         });
       }
       setFieldMappings(initialMappings);
-      setValidationMessages([]);
+      setValidationMessages([]); // Clear validation messages on entity or columns change
     }
   }, [selectedEntityId, appColumns, activeDialog]);
 
+
   const handleMappingChange = (targetFieldName: string, sourceColumnName: string) => {
     setFieldMappings(prev => ({ ...prev, [targetFieldName]: sourceColumnName }));
-    setValidationMessages([]);
+    setValidationMessages([]); // Clear validation messages on mapping change
   };
 
   const validateRow = useCallback((row: Record<string, any>, rowIndex: number, entityFields: ExportEntityField[]): string[] => {
@@ -99,18 +107,21 @@ export function ExportDataDialog() {
       
       if (targetField.required && !sourceColumnName) {
         errors.push(`Row ${rowIndex + 1}, Target "${targetField.name}": required by API but not mapped.`);
-        return;
+        return; // Skip further validation for this field if unmapped but required
       }
-      if (!sourceColumnName) return; // Not mapped, not required
+      if (!sourceColumnName) return; // Not mapped, not required: skip validation for this field
       
       const value = row[sourceColumnName];
+      // Normalize to string for consistent validation, handle null/undefined as empty string
       const stringValue = (value === null || value === undefined) ? '' : String(value).trim();
 
+      // Check required only if it's truly empty after trim
       if (targetField.required && stringValue === '') {
         errors.push(`Row ${rowIndex + 1}, Field "${targetField.name}" (from "${sourceColumnName}"): required by API but source data is empty.`);
       }
 
-      if (stringValue !== '') { // Perform type and rule validation only if there's a value
+      // Perform type and rule validation only if there's a value or it's required (empty required already caught)
+      if (stringValue !== '') {
         switch (targetField.type) {
           case 'string':
           case 'email': // email specific checks below
@@ -127,6 +138,7 @@ export function ExportDataDialog() {
                   errors.push(`Row ${rowIndex + 1}, "${targetField.name}" (from "${sourceColumnName}"): does not match pattern "${targetField.pattern}". Value: "${stringValue.substring(0,50)}"`);
                 }
               } catch (e) {
+                // This error should ideally be caught during config setup, but good to have a fallback
                 errors.push(`Row ${rowIndex + 1}, "${targetField.name}": Invalid regex pattern "${targetField.pattern}" in config.`);
               }
             }
@@ -148,13 +160,15 @@ export function ExportDataDialog() {
             }
             break;
           case 'boolean':
-            if (!['true', 'false', '1', '0', ''].includes(stringValue.toLowerCase())) { // Allow empty string for non-required boolean
+            // For boolean, common values are "true", "false", "1", "0". Case-insensitive.
+            // Allow empty string for non-required boolean, it will be transformed to false or null later.
+            if (!['true', 'false', '1', '0', ''].includes(stringValue.toLowerCase())) {
               errors.push(`Row ${rowIndex + 1}, "${targetField.name}" (from "${sourceColumnName}"): should be boolean (true/false, 1/0). Found "${stringValue}".`);
             }
             break;
           case 'date':
             if (!isValidDateString(stringValue)) {
-              errors.push(`Row ${rowIndex + 1}, "${targetField.name}" (from "${sourceColumnName}"): not a valid date (e.g. YYYY-MM-DD). Found "${stringValue}".`);
+              errors.push(`Row ${rowIndex + 1}, "${targetField.name}" (from "${sourceColumnName}"): not a valid date (e.g. YYYY-MM-DD or MM/DD/YYYY). Found "${stringValue}".`);
             }
             break;
         }
@@ -183,9 +197,10 @@ export function ExportDataDialog() {
     setIsLoading(true);
     setValidationMessages([]); 
 
+    // Validate all rows, but cap displayed errors to avoid overwhelming UI
     let allValidationErrors: string[] = [];
     appData.forEach((row, index) => {
-      if (allValidationErrors.length < 100) {
+      if (allValidationErrors.length < 100) { // Stop collecting detailed errors after 100
         const rowErrors = validateRow(row, index, selectedEntity.fields);
         allValidationErrors = [...allValidationErrors, ...rowErrors];
       }
@@ -193,7 +208,7 @@ export function ExportDataDialog() {
 
     if (allValidationErrors.length > 0) {
       const errorCount = allValidationErrors.length;
-      const displayErrors = allValidationErrors.slice(0, 20);
+      const displayErrors = allValidationErrors.slice(0, 20); // Display first 20 errors
       if (errorCount > 20) {
         displayErrors.push(`...and ${errorCount - 20} more error(s).`);
       }
@@ -202,12 +217,13 @@ export function ExportDataDialog() {
         title: 'Validation Failed',
         description: `${errorCount} error(s) found. See dialog for details.`,
         variant: 'destructive',
-        duration: 7000,
+        duration: 7000, // Longer duration for error toast
       });
       setIsLoading(false);
       return;
     }
 
+    // If validation passes, prepare payload
     const payload = appData.map(row => {
       const transformedRow: Record<string, any> = {};
       selectedEntity.fields.forEach(targetField => {
@@ -216,47 +232,90 @@ export function ExportDataDialog() {
            let valueToTransform = row[sourceColumnName];
            const stringValue = (valueToTransform === null || valueToTransform === undefined) ? '' : String(valueToTransform).trim();
 
+           // Transform based on target type
            if (targetField.type === 'boolean') {
               valueToTransform = stringValue.toLowerCase() === 'true' || stringValue === '1';
            } else if (targetField.type === 'number' && stringValue !== '') {
               const num = parseFloat(stringValue);
-              valueToTransform = isNaN(num) ? null : num; // Send null if not a valid number
+              valueToTransform = isNaN(num) ? null : num; // Send null if not a valid number, or original string if API expects stringy number
            } else if (targetField.type === 'date' && stringValue !== '') {
-             // Assuming API expects date as string (e.g., ISO). Add specific formatting if needed.
+             // API might expect date as string (e.g., ISO). Add specific formatting if needed here based on API requirements.
+             // For now, send the validated string.
              valueToTransform = stringValue;
            } else if (stringValue === '' && !targetField.required) {
-             // For non-required fields, if source is empty, send null or omit. Let's send null.
+             // For non-required fields, if source is empty string, send null to API.
              valueToTransform = null;
            } else {
-             valueToTransform = stringValue; // Default to string
+             valueToTransform = stringValue; // Default to string if no other transformation
            }
            transformedRow[targetField.name] = valueToTransform;
         } else if (targetField.required) {
-          // This should have been caught by validation.
-          // If it reaches here, implies an issue or an unmapped required field.
-          transformedRow[targetField.name] = null; 
+          // This should have been caught by validation: required field not mapped.
+          // Or, if mapped but source data is truly empty for a required field, also caught.
+          // If it somehow reaches here, implies an issue or an unmapped required field.
+          transformedRow[targetField.name] = null; // Or some other default for required unmapped fields
         }
+        // If not required and not mapped, it's simply omitted from transformedRow
       });
       return transformedRow;
     });
 
+    // Fetch and include auth token
+    let authToken: string | null = null;
+    if (typeof window !== 'undefined') {
+        authToken = localStorage.getItem(AUTH_TOKEN_STORAGE_KEY);
+    }
+
+    const requestHeaders: HeadersInit = {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json, text/plain, */*',
+    };
+    if (authToken) {
+        requestHeaders['Authorization'] = `Bearer ${authToken}`;
+    } else {
+        console.warn("No auth token found in local storage. Proceeding without Authorization header.");
+        showToast({ title: 'Auth Token Missing', description: 'No API auth token found. Exporting without authentication.', variant: 'destructive' });
+    }
+
     try {
+      // Simulate API call
       console.log(`Simulating export to: ${selectedEntity.url}`);
+      console.log('Request Headers:', requestHeaders);
       console.log('Export Payload:', JSON.stringify(payload, null, 2));
       
-      await new Promise(resolve => setTimeout(resolve, 1000)); 
+      // Replace with actual fetch call when ready
+      // const response = await fetch(selectedEntity.url, {
+      //   method: 'POST',
+      //   headers: requestHeaders,
+      //   body: JSON.stringify(payload),
+      // });
+      // if (!response.ok) {
+      //   const errorData = await response.json().catch(() => ({ message: `API Error: ${response.status}` }));
+      //   throw new Error(errorData.message || `API Error: ${response.status}`);
+      // }
+      // const responseData = await response.json();
+      
+      await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate network delay
 
-      showToast({ title: 'Export "Simulated" Successfully', description: `Data for "${selectedEntity.name}" prepared. Check browser console for payload.` });
+      // showToast({ title: 'Export Successful (Simulated)', description: `Data for "${selectedEntity.name}" sent to API. ${JSON.stringify(responseData)}` });
+      showToast({ title: 'Export "Simulated" Successfully', description: `Data for "${selectedEntity.name}" prepared. Check browser console for payload and headers.` });
+      // closeDialog(); // Optionally close dialog on success
     } catch (error: any) {
       console.error('Error exporting data:', error);
-      setValidationMessages([`Export Error: ${error.message || 'An unknown error occurred.'}`]);
-      showToast({ title: 'Export Error', description: 'An error occurred. See dialog for details.', variant: 'destructive' });
+      // Display error in the dialog for better visibility
+      setValidationMessages([`Export Error: ${error.message || 'An unknown error occurred during export.'}`]);
+      showToast({ title: 'Export Error', description: 'An error occurred during the export process. See dialog for details.', variant: 'destructive' });
     } finally {
       setIsLoading(false);
     }
   };
 
+  // Determine if export button should be disabled
   const selectedEntityConfig = exportEntities.find(e => e.id === selectedEntityId);
+  const isExportDisabled = isLoading || 
+                           !selectedEntityId || 
+                           appData.length === 0 ||
+                           (selectedEntityConfig?.fields.some(f => f.required && !fieldMappings[f.name]) ?? true);
 
   return (
     <Dialog open={activeDialog === 'export'} onOpenChange={(isOpen) => { if (!isOpen) closeDialog(); }}>
@@ -323,7 +382,7 @@ export function ExportDataDialog() {
 
         <DialogFooter>
           <Button variant="outline" onClick={closeDialog} disabled={isLoading}>Cancel</Button>
-          <Button onClick={handleExportData} disabled={isLoading || !selectedEntityId || appData.length === 0 || (selectedEntityConfig?.fields.some(f => f.required && !fieldMappings[f.name]) ?? true)}>
+          <Button onClick={handleExportData} disabled={isExportDisabled}>
             {isLoading ? 'Processing...' : 'Export Data'}
           </Button>
         </DialogFooter>

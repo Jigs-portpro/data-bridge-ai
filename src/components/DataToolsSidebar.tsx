@@ -12,7 +12,8 @@ import {
   CopyCheck,
   Github,
   LogOut,
-  Settings, // Added Settings icon
+  Settings,
+  KeyRound, // Added KeyRound icon
 } from 'lucide-react';
 import {
   Sidebar,
@@ -27,7 +28,7 @@ import {
   SidebarGroupLabel,
   SidebarGroupContent
 } from '@/components/ui/sidebar';
-import Link from 'next/link'; // Added Link for navigation
+import Link from 'next/link';
 
 
 const toolConfig = [
@@ -85,11 +86,26 @@ export function DataToolsSidebar() {
                                     disabled={!isAuthenticated}
                                     tooltip={{children: "Setup Entities", side:"right", align:"center"}}
                                     className="justify-start"
-                                    asChild // Important for Link to work with Button styling
+                                    asChild
                                 >
                                    <a>
                                     <Settings className="h-5 w-5" />
                                     <span className="group-data-[collapsible=icon]:hidden">Setup</span>
+                                   </a>
+                                </SidebarMenuButton>
+                            </Link>
+                        </SidebarMenuItem>
+                         <SidebarMenuItem>
+                            <Link href="/auth-token" passHref legacyBehavior>
+                                <SidebarMenuButton
+                                    disabled={!isAuthenticated}
+                                    tooltip={{children: "API Auth Token", side:"right", align:"center"}}
+                                    className="justify-start"
+                                    asChild
+                                >
+                                   <a>
+                                    <KeyRound className="h-5 w-5" />
+                                    <span className="group-data-[collapsible=icon]:hidden">API Auth</span>
                                    </a>
                                 </SidebarMenuButton>
                             </Link>
