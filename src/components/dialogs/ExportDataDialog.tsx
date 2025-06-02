@@ -301,7 +301,9 @@ export function ExportDataDialog() {
         showToast({ title: 'Auth Token Missing', description: 'No API auth token found. Exporting without authentication.', variant: 'destructive' });
     }
 
-    const fullApiUrl = (exportConfig.baseUrl.endsWith('/') ? exportConfig.baseUrl.slice(0, -1) : exportConfig.baseUrl) +
+    // Ensure baseUrl is not empty before constructing the URL
+    const baseUrl = exportConfig.baseUrl || 'https://api.example.com/v1'; // Fallback, though API should provide it
+    const fullApiUrl = (baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl) +
                        (selectedEntity.url.startsWith('/') ? selectedEntity.url : '/' + selectedEntity.url);
 
     try {
