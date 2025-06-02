@@ -12,6 +12,7 @@ import {
   CopyCheck,
   Github,
   LogOut,
+  Settings, // Added Settings icon
 } from 'lucide-react';
 import {
   Sidebar,
@@ -26,6 +27,7 @@ import {
   SidebarGroupLabel,
   SidebarGroupContent
 } from '@/components/ui/sidebar';
+import Link from 'next/link'; // Added Link for navigation
 
 
 const toolConfig = [
@@ -43,10 +45,12 @@ export function DataToolsSidebar() {
   return (
     <Sidebar collapsible="icon" variant="sidebar" className="border-r">
         <SidebarHeader className="p-4">
-          <div className="flex items-center gap-2 group-data-[collapsible=icon]:justify-center">
-            <LogoIcon className="w-8 h-8 text-primary group-data-[collapsible=icon]:w-6 group-data-[collapsible=icon]:h-6 transition-all" />
-            <h1 className="text-2xl font-headline font-semibold text-primary group-data-[collapsible=icon]:hidden">DataWise AI</h1>
-          </div>
+          <Link href="/" passHref>
+            <div className="flex items-center gap-2 group-data-[collapsible=icon]:justify-center cursor-pointer">
+              <LogoIcon className="w-8 h-8 text-primary group-data-[collapsible=icon]:w-6 group-data-[collapsible=icon]:h-6 transition-all" />
+              <h1 className="text-2xl font-headline font-semibold text-primary group-data-[collapsible=icon]:hidden">DataWise AI</h1>
+            </div>
+          </Link>
         </SidebarHeader>
         <SidebarContent className="p-2">
           <SidebarMenu>
@@ -67,6 +71,29 @@ export function DataToolsSidebar() {
                             </SidebarMenuButton>
                             </SidebarMenuItem>
                         ))}
+                    </SidebarMenu>
+                </SidebarGroupContent>
+            </SidebarGroup>
+            <SidebarSeparator className="my-2" />
+            <SidebarGroup>
+                <SidebarGroupLabel className="group-data-[collapsible=icon]:hidden">Application</SidebarGroupLabel>
+                <SidebarGroupContent>
+                    <SidebarMenu>
+                        <SidebarMenuItem>
+                            <Link href="/setup" passHref legacyBehavior>
+                                <SidebarMenuButton
+                                    disabled={!isAuthenticated}
+                                    tooltip={{children: "Setup Entities", side:"right", align:"center"}}
+                                    className="justify-start"
+                                    asChild // Important for Link to work with Button styling
+                                >
+                                   <a>
+                                    <Settings className="h-5 w-5" />
+                                    <span className="group-data-[collapsible=icon]:hidden">Setup</span>
+                                   </a>
+                                </SidebarMenuButton>
+                            </Link>
+                        </SidebarMenuItem>
                     </SidebarMenu>
                 </SidebarGroupContent>
             </SidebarGroup>
@@ -92,4 +119,3 @@ export function DataToolsSidebar() {
       </Sidebar>
   );
 }
-
