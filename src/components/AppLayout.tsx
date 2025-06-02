@@ -3,6 +3,7 @@
 import { useAppContext } from '@/hooks/useAppContext';
 import { DataToolsSidebar } from '@/components/DataToolsSidebar';
 import { FileUploadButton } from '@/components/FileUploadButton';
+import { GoogleSheetInput } from '@/components/GoogleSheetInput';
 import { DataTable } from '@/components/DataTable';
 import { ChatPane } from '@/components/ChatPane';
 import { DataCorrectionDialog } from '@/components/dialogs/DataCorrectionDialog';
@@ -12,6 +13,7 @@ import { AnomalyReportDialog } from '@/components/dialogs/AnomalyReportDialog';
 import { DuplicateDetectionDialog } from '@/components/dialogs/DuplicateDetectionDialog';
 import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Separator } from '@/components/ui/separator';
 
 export function AppLayout() {
   const { activeDialog } = useAppContext();
@@ -25,8 +27,12 @@ export function AppLayout() {
             <main className="container mx-auto p-4 md:p-6 lg:p-8 space-y-6">
               <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
                 <h1 className="text-3xl font-bold font-headline text-primary">DataWise Dashboard</h1>
-                <FileUploadButton />
+                <div className="flex flex-col sm:flex-row items-center gap-2">
+                  <FileUploadButton />
+                  <GoogleSheetInput />
+                </div>
               </div>
+              <Separator />
               <DataTable />
               <ChatPane />
             </main>
