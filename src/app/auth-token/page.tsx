@@ -23,7 +23,6 @@ export default function AuthTokenPage() {
     clearApiToken,
     getApiToken,
     currentCompanyName, 
-    setCurrentCompanyName 
   } = useAppContext();
   
   const [email, setEmail] = useState('jthurston@centraltransport.com');
@@ -36,12 +35,13 @@ export default function AuthTokenPage() {
     if (typeof window !== 'undefined') {
       setStoredTokenValue(getApiToken());
     }
-  }, [getApiToken, currentCompanyName]); // Added currentCompanyName to dependencies to re-check display text
+  }, [getApiToken, currentCompanyName]);
 
   const extractCompanyName = (response: any): string | null => {
     if (!response) return null;
-    return response.data?.company?.name || 
-           response.data?.user?.companyName || 
+    // Prioritize the path from the user's example
+    return response.data?.user?.company_name || 
+           response.data?.company?.name || 
            response.data?.name || 
            response.company_name || 
            response.name || 
@@ -81,7 +81,7 @@ export default function AuthTokenPage() {
 
       if (token) {
         storeApiToken(token, companyName); 
-        setStoredTokenValue(token); // Update local state to reflect new token
+        setStoredTokenValue(token); 
         showToast({ title: 'Success', description: 'Token obtained. Full API response displayed below.' });
       } else {
         throw new Error('Token not found in API response.');
@@ -91,7 +91,7 @@ export default function AuthTokenPage() {
       const errorMessage = error instanceof Error ? error.message : 'Failed to obtain token.';
       showToast({ title: 'Error', description: errorMessage, variant: 'destructive' });
       clearApiToken(); 
-      setStoredTokenValue(null); // Update local state
+      setStoredTokenValue(null); 
     } finally {
       setIsFetchingToken(false);
       setAppIsLoading(false);
@@ -181,7 +181,7 @@ export default function AuthTokenPage() {
                     {currentCompanyName ? ` for ${currentCompanyName}.` : '.'}
                   </p>
                 )}
-                {!storedTokenValue && currentCompanyName && ( // Case where company name might be stored but token isn't (less likely but good to handle)
+                {!storedTokenValue && currentCompanyName && ( 
                    <div className="flex items-center text-sm text-blue-600">
                     <Building className="mr-2 h-4 w-4"/> 
                     Target Company: <span className="font-semibold ml-1">{currentCompanyName}</span> (Token missing)
