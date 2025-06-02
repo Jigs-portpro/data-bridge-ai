@@ -22,7 +22,7 @@ export default function AuthTokenPage() {
     storeApiToken,
     clearApiToken,
     getApiToken,
-    currentCompanyName, // Use this from context
+    currentCompanyName, 
     setCurrentCompanyName 
   } = useAppContext();
   
@@ -35,18 +35,16 @@ export default function AuthTokenPage() {
   useEffect(() => {
     if (typeof window !== 'undefined') {
       setStoredTokenValue(getApiToken());
-      // currentCompanyName is already managed by AppContext from localStorage
     }
-  }, [getApiToken]);
+  }, [getApiToken, currentCompanyName]); // Added currentCompanyName to dependencies to re-check display text
 
   const extractCompanyName = (response: any): string | null => {
     if (!response) return null;
-    // Try common paths for company name
     return response.data?.company?.name || 
            response.data?.user?.companyName || 
-           response.data?.name || // If company info is directly in data
-           response.company_name || // If at root level
-           response.name || // If name is at root and implies company
+           response.data?.name || 
+           response.company_name || 
+           response.name || 
            null;
   };
 
@@ -82,8 +80,8 @@ export default function AuthTokenPage() {
       const companyName = extractCompanyName(responseData);
 
       if (token) {
-        storeApiToken(token, companyName); // This will also call setCurrentCompanyName and save to localStorage
-        setStoredTokenValue(token);
+        storeApiToken(token, companyName); 
+        setStoredTokenValue(token); // Update local state to reflect new token
         showToast({ title: 'Success', description: 'Token obtained. Full API response displayed below.' });
       } else {
         throw new Error('Token not found in API response.');
@@ -92,8 +90,8 @@ export default function AuthTokenPage() {
       console.error('Error obtaining token:', error);
       const errorMessage = error instanceof Error ? error.message : 'Failed to obtain token.';
       showToast({ title: 'Error', description: errorMessage, variant: 'destructive' });
-      clearApiToken(); // This will also clear company name from context & localStorage
-      setStoredTokenValue(null);
+      clearApiToken(); 
+      setStoredTokenValue(null); // Update local state
     } finally {
       setIsFetchingToken(false);
       setAppIsLoading(false);
@@ -122,8 +120,8 @@ export default function AuthTokenPage() {
 
   return (
     <AppLayout pageTitle={pageTitleString}>
-      <ScrollArea className="flex-grow"> {/* Makes the content area scrollable */}
-        <div className="p-1 space-y-6"> {/* Added padding to scroll area content */}
+      <ScrollArea className="flex-grow"> 
+        <div className="p-1 space-y-6"> 
           <div className="flex items-center gap-2">
               <KeyRound className="h-6 w-6 text-muted-foreground" />
               <span className="text-lg font-semibold">Configure API Access & Target Context</span>
@@ -177,13 +175,18 @@ export default function AuthTokenPage() {
                 <CardTitle>Current API Context</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
-                {storedTokenValue && <p className="text-sm text-green-600">An API token is currently stored.</p>}
-                {currentCompanyName && 
-                  <div className="flex items-center text-sm text-blue-600">
+                {storedTokenValue && (
+                  <p className="text-sm text-green-600">
+                    An API token is currently stored
+                    {currentCompanyName ? ` for ${currentCompanyName}.` : '.'}
+                  </p>
+                )}
+                {!storedTokenValue && currentCompanyName && ( // Case where company name might be stored but token isn't (less likely but good to handle)
+                   <div className="flex items-center text-sm text-blue-600">
                     <Building className="mr-2 h-4 w-4"/> 
-                    Target Company: <span className="font-semibold ml-1">{currentCompanyName}</span>
+                    Target Company: <span className="font-semibold ml-1">{currentCompanyName}</span> (Token missing)
                   </div>
-                }
+                )}
                 {!storedTokenValue && !currentCompanyName && <p className="text-sm text-muted-foreground">No token or company context stored.</p>}
                 
                 <Button onClick={handleClearTokenAndCompany} variant="outline" className="w-full" disabled={isLoading}>

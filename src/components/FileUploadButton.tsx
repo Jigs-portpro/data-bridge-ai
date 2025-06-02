@@ -3,15 +3,17 @@
 
 import type React from 'react';
 import { useRef } from 'react';
+import { useRouter } from 'next/navigation'; // Added useRouter
 import { Button } from '@/components/ui/button';
 import { UploadCloud } from 'lucide-react';
 import { useAppContext } from '@/hooks/useAppContext';
-import { parseCSV, findActualDataStart } from '@/lib/csvUtils'; // Import findActualDataStart
+import { parseCSV, findActualDataStart } from '@/lib/csvUtils';
 import * as XLSX from 'xlsx';
 
 export function FileUploadButton() {
   const { setData, setFileName, showToast, setIsLoading, clearChatHistory } = useAppContext();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const router = useRouter(); // Initialize router
 
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -47,13 +49,12 @@ export function FileUploadButton() {
           if (file.type === validCsvType || file.name.endsWith('.csv')) {
             const parsedResult = parseCSV(fileContent as string);
             parsedDataRows = parsedResult.rows;
-            finalHeaders = parsedResult.headers; // parseCSV now returns headers correctly
+            finalHeaders = parsedResult.headers;
           } else if (file.type === validXlsType || file.type === validXlsxType || file.name.endsWith('.xls') || file.name.endsWith('.xlsx')) {
             const workbook = XLSX.read(fileContent, { type: 'array' });
             const firstSheetName = workbook.SheetNames[0];
             const worksheet = workbook.Sheets[firstSheetName];
             
-            // Get all rows as arrays of values, converting all to strings for consistent processing
             const allSheetRowsMixedTypes: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1, raw: false, blankrows: true });
             const allSheetRowsAsStrings: string[][] = allSheetRowsMixedTypes.map(row => 
               row.map(cell => (cell === null || cell === undefined) ? "" : String(cell).trim())
@@ -67,16 +68,14 @@ export function FileUploadButton() {
               parsedDataRows = dataContentRows.map(rowArray => {
                 const row: Record<string, any> = {};
                 finalHeaders.forEach((header, index) => {
-                  // Try to use original type from mixed types if available, fallback to string
                   const originalRow = allSheetRowsMixedTypes[dataStartIndex + 1 + dataContentRows.indexOf(rowArray)];
                   row[header] = originalRow && originalRow[index] !== undefined ? originalRow[index] : rowArray[index] ?? '';
                 });
-                // Filter out rows that might be all empty after header mapping
                 if(Object.values(row).every(val => val === '')) return null;
                 return row;
               }).filter(row => row !== null) as Record<string, any>[];
             } else {
-               parsedDataRows = []; // No headers found means no structured data
+               parsedDataRows = [];
             }
           }
           
@@ -85,13 +84,14 @@ export function FileUploadButton() {
               title: 'No Data Found',
               description: 'Could not find any structured data in the file.',
             });
-             setData([]); // Ensure data is cleared
+             setData([]);
           } else {
-            setData(parsedDataRows); // This will also update columns via context
+            setData(parsedDataRows); 
              showToast({
               title: 'File Uploaded',
               description: `${file.name} processed successfully.`,
             });
+            router.push('/'); // Navigate to home page
           }
 
         } catch (error) {
@@ -149,5 +149,3 @@ export function FileUploadButton() {
     </>
   );
 }
-
-    
