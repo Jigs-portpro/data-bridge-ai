@@ -11,11 +11,15 @@ import { DataEnrichmentDialog } from '@/components/dialogs/DataEnrichmentDialog'
 import { ColumnReorderDialog } from '@/components/dialogs/ColumnReorderDialog';
 import { AnomalyReportDialog } from '@/components/dialogs/AnomalyReportDialog';
 import { DuplicateDetectionDialog } from '@/components/dialogs/DuplicateDetectionDialog';
+import { ExportDataDialog } from '@/components/dialogs/ExportDataDialog'; // Import the new dialog
 import { SidebarProvider, SidebarInset, SidebarTrigger } from '@/components/ui/sidebar';
 import { Separator } from '@/components/ui/separator';
+import { Button } from '@/components/ui/button';
+import { Send } from 'lucide-react';
 
 export function AppLayout() {
-  const { activeDialog } = useAppContext();
+  const { activeDialog, openDialog, data } = useAppContext();
+  const isDataLoaded = data.length > 0;
 
   return (
     <SidebarProvider defaultOpen={true}>
@@ -32,6 +36,14 @@ export function AppLayout() {
                 </div>
                 <div className="flex flex-col sm:flex-row items-center gap-2">
                   <FileUploadButton />
+                  <Button 
+                    variant="outline" 
+                    onClick={() => openDialog('export')}
+                    disabled={!isDataLoaded}
+                  >
+                    <Send className="mr-2 h-4 w-4" />
+                    Export Data
+                  </Button>
                 </div>
               </div>
             </div>
@@ -56,6 +68,7 @@ export function AppLayout() {
       {activeDialog === 'reorder' && <ColumnReorderDialog />}
       {activeDialog === 'anomaly' && <AnomalyReportDialog />}
       {activeDialog === 'duplicate' && <DuplicateDetectionDialog />}
+      {activeDialog === 'export' && <ExportDataDialog />} 
     </SidebarProvider>
   );
 }
