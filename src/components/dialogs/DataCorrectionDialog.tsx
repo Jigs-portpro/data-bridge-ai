@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect } from 'react';
@@ -40,8 +41,9 @@ export function DataCorrectionDialog() {
   const [suggestions, setSuggestions] = useState<SuggestDataCorrectionsOutput | null>(null);
 
   useEffect(() => {
-    if (columns.length > 0) {
+    if (columns.length > 0 && activeDialog === 'correction') {
       setSelectedColumn(columns[0]);
+      setSuggestions(null); // Clear previous suggestions when dialog opens or columns change
     }
   }, [columns, activeDialog]);
 
@@ -56,9 +58,15 @@ export function DataCorrectionDialog() {
       const columnData = data.map(row => String(row[selectedColumn] ?? ''));
       const result = await suggestDataCorrections({ columnName: selectedColumn, data: columnData });
       setSuggestions(result);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error getting data correction suggestions:', error);
-      showToast({ title: 'Error', description: 'Failed to get correction suggestions.', variant: 'destructive' });
+      let description = 'Failed to get correction suggestions. Please try again.';
+      // Check if the error message indicates a service availability issue
+      const errorMessage = String(error?.message || error).toLowerCase();
+      if (errorMessage.includes('503') || errorMessage.includes('service unavailable') || errorMessage.includes('overloaded')) {
+        description = 'The AI service is temporarily unavailable or overloaded. Please try again later.';
+      }
+      showToast({ title: 'Suggestion Error', description, variant: 'destructive' });
     } finally {
       setIsLoading(false);
     }
@@ -74,8 +82,7 @@ export function DataCorrectionDialog() {
       }));
       setData(newData);
       showToast({ title: 'Corrections Applied', description: `Corrections applied to column "${selectedColumn}".` });
-      setSuggestions(null); // Clear suggestions after applying
-      // closeDialog(); // Optionally close dialog
+      setSuggestions(null); 
     } catch (error) {
       console.error('Error applying corrections:', error);
       showToast({ title: 'Error', description: 'Failed to apply corrections.', variant: 'destructive' });
@@ -85,7 +92,7 @@ export function DataCorrectionDialog() {
   };
 
   return (
-    <Dialog open={activeDialog === 'correction'} onOpenChange={(isOpen) => !isOpen && closeDialog()}>
+    <Dialog open={activeDialog === 'correction'} onOpenChange={(isOpen) => { if (!isOpen) closeDialog(); }}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle className="font-headline flex items-center"><Wand2 className="mr-2 h-5 w-5 text-primary" />Data Correction Suggestions</DialogTitle>
