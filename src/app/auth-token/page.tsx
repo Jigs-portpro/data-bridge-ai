@@ -6,32 +6,55 @@ import { AppLayout } from '@/components/AppLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { useAppContext } from '@/hooks/useAppContext';
-import { KeyRound, Loader2, Trash2, Eye } from 'lucide-react';
-import { Separator } from '@/components/ui/separator';
-import { Textarea } from '@/components/ui/textarea';
+import { KeyRound, Loader2, Trash2, Eye, Building } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
-
-const AUTH_TOKEN_STORAGE_KEY = 'datawiseAuthToken';
+import { Textarea } from '@/components/ui/textarea';
 
 export default function AuthTokenPage() {
-  const { showToast, isLoading, setIsLoading, isAuthenticated, isAuthLoading } = useAppContext();
-  const [email, setEmail] = useState('jthurston@centraltransport.com'); // Pre-fill from cURL
-  const [password, setPassword] = useState(''); // Pre-fill from cURL
-  const [storedToken, setStoredToken] = useState<string | null>(null);
+  const { 
+    showToast, 
+    isLoading: appIsLoading, 
+    setIsLoading: setAppIsLoading, 
+    isAuthenticated, 
+    isAuthLoading,
+    storeApiToken,
+    clearApiToken,
+    getApiToken,
+    currentCompanyName, // Use this from context
+    setCurrentCompanyName 
+  } = useAppContext();
+  
+  const [email, setEmail] = useState('jthurston@centraltransport.com');
+  const [password, setPassword] = useState('');
+  const [storedTokenValue, setStoredTokenValue] = useState<string | null>(null);
   const [fullApiResponse, setFullApiResponse] = useState<any | null>(null);
+  const [isFetchingToken, setIsFetchingToken] = useState(false);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      setStoredToken(localStorage.getItem(AUTH_TOKEN_STORAGE_KEY));
+      setStoredTokenValue(getApiToken());
+      // currentCompanyName is already managed by AppContext from localStorage
     }
-  }, []);
+  }, [getApiToken]);
+
+  const extractCompanyName = (response: any): string | null => {
+    if (!response) return null;
+    // Try common paths for company name
+    return response.data?.company?.name || 
+           response.data?.user?.companyName || 
+           response.data?.name || // If company info is directly in data
+           response.company_name || // If at root level
+           response.name || // If name is at root and implies company
+           null;
+  };
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    setIsLoading(true);
-    setFullApiResponse(null); // Clear previous response
+    setIsFetchingToken(true);
+    setAppIsLoading(true);
+    setFullApiResponse(null); 
     try {
       const response = await fetch('https://api.axle.network/login', {
         method: 'POST',
@@ -49,19 +72,18 @@ export default function AuthTokenPage() {
       });
 
       const responseData = await response.json();
-      setFullApiResponse(responseData); // Store the full response
+      setFullApiResponse(responseData); 
 
       if (!response.ok) {
         throw new Error(responseData.message || `API Error: ${response.status}`);
       }
       
       const token = responseData.token || responseData.data?.token;
+      const companyName = extractCompanyName(responseData);
 
       if (token) {
-        if (typeof window !== 'undefined') {
-            localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, token);
-        }
-        setStoredToken(token);
+        storeApiToken(token, companyName); // This will also call setCurrentCompanyName and save to localStorage
+        setStoredTokenValue(token);
         showToast({ title: 'Success', description: 'Token obtained. Full API response displayed below.' });
       } else {
         throw new Error('Token not found in API response.');
@@ -70,27 +92,24 @@ export default function AuthTokenPage() {
       console.error('Error obtaining token:', error);
       const errorMessage = error instanceof Error ? error.message : 'Failed to obtain token.';
       showToast({ title: 'Error', description: errorMessage, variant: 'destructive' });
-      if (typeof window !== 'undefined') {
-        localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
-      }
-      setStoredToken(null);
+      clearApiToken(); // This will also clear company name from context & localStorage
+      setStoredTokenValue(null);
     } finally {
-      setIsLoading(false);
+      setIsFetchingToken(false);
+      setAppIsLoading(false);
     }
   };
 
-  const handleClearToken = () => {
-    if (typeof window !== 'undefined') {
-        localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
-    }
-    setStoredToken(null);
+  const handleClearTokenAndCompany = () => {
+    clearApiToken();
+    setStoredTokenValue(null);
     setFullApiResponse(null);
-    showToast({ title: 'Token Cleared', description: 'Authentication token and API response removed.' });
+    showToast({ title: 'Token & Context Cleared', description: 'Authentication token and API target context removed.' });
   };
   
   if (isAuthLoading || !isAuthenticated) {
      return (
-      <AppLayout pageTitle="Loading Auth Token...">
+      <AppLayout pageTitle="Loading API Token Setup...">
         <div className="flex h-full items-center justify-center">
           <Loader2 className="h-12 w-12 animate-spin text-primary" />
         </div>
@@ -99,102 +118,107 @@ export default function AuthTokenPage() {
   }
   
   const pageTitleString = "API Authentication Token";
+  const isLoading = appIsLoading || isFetchingToken;
 
   return (
     <AppLayout pageTitle={pageTitleString}>
-      <div className="space-y-6">
-         <div className="flex items-center gap-2">
-            <KeyRound className="h-6 w-6 text-muted-foreground" />
-            <span className="text-lg font-semibold">Configure API Access</span>
-         </div>
-        <CardDescription>
-          Use this page to obtain a bearer token from the API. The token will be stored in your browser's local storage and used for "Export Data" API calls. The full API response will also be displayed for inspection.
-        </CardDescription>
-        
-        <Card className="w-full max-w-lg mx-auto">
-          <CardHeader>
-            <CardTitle>Login to API</CardTitle>
-            <CardDescription>Enter your API credentials to get a bearer token and view the full response.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-6">
-              <div className="space-y-2">
-                <Label htmlFor="email">Email Address</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder="johndoe@example.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                  disabled={isLoading}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
-                <Input
-                  id="password"
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  disabled={isLoading}
-                  placeholder="Enter API password (can be empty as per cURL)"
-                />
-                 <p className="text-xs text-muted-foreground">Leave empty if your API password is an empty string.</p>
-              </div>
-              <Button type="submit" className="w-full" disabled={isLoading}>
-                {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                Get/Refresh Token & View Response
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
-
-        {storedToken && (
-          <Card className="w-full max-w-lg mx-auto mt-6">
+      <ScrollArea className="flex-grow"> {/* Makes the content area scrollable */}
+        <div className="p-1 space-y-6"> {/* Added padding to scroll area content */}
+          <div className="flex items-center gap-2">
+              <KeyRound className="h-6 w-6 text-muted-foreground" />
+              <span className="text-lg font-semibold">Configure API Access & Target Context</span>
+          </div>
+          <CardDescription>
+            Use this page to obtain a bearer token from the API. The token and extracted company information (if found) will be stored and used for "Export Data" API calls. The full API response is displayed for inspection.
+          </CardDescription>
+          
+          <Card className="w-full max-w-lg mx-auto">
             <CardHeader>
-              <CardTitle>Stored Token</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <p className="text-sm text-green-600">A token is currently stored in local storage.</p>
-              <Input
-                type="text"
-                value={storedToken ? `Bearer ${storedToken.substring(0, 20)}... (click clear to see full value if re-fetched)` : 'No token stored'}
-                readOnly
-                className="font-mono text-xs"
-              />
-               <Button onClick={handleClearToken} variant="outline" className="w-full" disabled={isLoading}>
-                <Trash2 className="mr-2 h-4 w-4" /> Clear Stored Token & API Response
-              </Button>
-            </CardContent>
-          </Card>
-        )}
-         {!storedToken && !isLoading && (
-            <p className="text-center text-muted-foreground mt-6">No token is currently stored. Use the form above to obtain one.</p>
-        )}
-
-        {fullApiResponse && (
-          <Card className="w-full max-w-2xl mx-auto mt-6">
-            <CardHeader>
-              <CardTitle className="flex items-center">
-                <Eye className="mr-2 h-5 w-5" />
-                Full API Response
-              </CardTitle>
-              <CardDescription>This is the complete JSON response received from the authentication API.</CardDescription>
+              <CardTitle>Login to Target API</CardTitle>
+              <CardDescription>Enter your API credentials to get a bearer token.</CardDescription>
             </CardHeader>
             <CardContent>
-              <ScrollArea className="h-72">
-                <Textarea
-                  value={JSON.stringify(fullApiResponse, null, 2)}
-                  readOnly
-                  className="font-mono text-xs bg-muted/30"
-                  rows={15}
-                />
-              </ScrollArea>
+              <form onSubmit={handleSubmit} className="space-y-6">
+                <div className="space-y-2">
+                  <Label htmlFor="email">Email Address</Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    placeholder="johndoe@example.com"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                    disabled={isLoading}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="password">Password</Label>
+                  <Input
+                    id="password"
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    disabled={isLoading}
+                    placeholder="Enter API password (can be empty)"
+                  />
+                  <p className="text-xs text-muted-foreground">Leave empty if your API password is an empty string.</p>
+                </div>
+                <Button type="submit" className="w-full" disabled={isLoading}>
+                  {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                  Get/Refresh Token
+                </Button>
+              </form>
             </CardContent>
           </Card>
-        )}
-      </div>
+
+          {(storedTokenValue || currentCompanyName) && (
+            <Card className="w-full max-w-lg mx-auto mt-6">
+              <CardHeader>
+                <CardTitle>Current API Context</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {storedTokenValue && <p className="text-sm text-green-600">An API token is currently stored.</p>}
+                {currentCompanyName && 
+                  <div className="flex items-center text-sm text-blue-600">
+                    <Building className="mr-2 h-4 w-4"/> 
+                    Target Company: <span className="font-semibold ml-1">{currentCompanyName}</span>
+                  </div>
+                }
+                {!storedTokenValue && !currentCompanyName && <p className="text-sm text-muted-foreground">No token or company context stored.</p>}
+                
+                <Button onClick={handleClearTokenAndCompany} variant="outline" className="w-full" disabled={isLoading}>
+                  <Trash2 className="mr-2 h-4 w-4" /> Clear Stored Token & Target Context
+                </Button>
+              </CardContent>
+            </Card>
+          )}
+          {!storedTokenValue && !currentCompanyName && !isLoading && (
+              <p className="text-center text-muted-foreground mt-6">No token or company context is currently stored. Use the form above.</p>
+          )}
+
+          {fullApiResponse && (
+            <Card className="w-full max-w-2xl mx-auto mt-6">
+              <CardHeader>
+                <CardTitle className="flex items-center">
+                  <Eye className="mr-2 h-5 w-5" />
+                  Full API Response
+                </CardTitle>
+                <CardDescription>This is the complete JSON response received from the authentication API.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ScrollArea className="h-72">
+                  <Textarea
+                    value={JSON.stringify(fullApiResponse, null, 2)}
+                    readOnly
+                    className="font-mono text-xs bg-muted/30"
+                    rows={15}
+                  />
+                </ScrollArea>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      </ScrollArea>
     </AppLayout>
   );
 }

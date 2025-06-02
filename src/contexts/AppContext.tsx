@@ -7,6 +7,9 @@ import { useToast } from '@/hooks/use-toast';
 import type { ToastProps } from '@/components/ui/toast';
 import { useRouter, usePathname } from 'next/navigation';
 
+const AUTH_TOKEN_STORAGE_KEY = 'datawiseAuthToken';
+const AUTH_COMPANY_STORAGE_KEY = 'datawiseAuthCompany';
+
 type AppContextType = {
   data: Record<string, any>[];
   setData: (data: Record<string, any>[]) => void;
@@ -24,14 +27,19 @@ type AppContextType = {
   addChatMessage: (message: { role: 'user' | 'assistant'; content: string }) => void;
   clearChatHistory: () => void;
   isAuthenticated: boolean;
-  login: (username: string, pass: string) => boolean;
+  login: (username: string, pass: string) => boolean; // This is for app login, not API token
   logout: () => void;
-  isAuthLoading: boolean; // To prevent quick redirects before auth status is confirmed
+  isAuthLoading: boolean;
+  currentCompanyName: string | null;
+  setCurrentCompanyName: (name: string | null) => void;
+  storeApiToken: (token: string, companyName?: string | null) => void;
+  clearApiToken: () => void;
+  getApiToken: () => string | null;
 };
 
 export const AppContext = createContext<AppContextType | undefined>(undefined);
 
-// Hardcoded credentials
+// Hardcoded credentials for app login
 const HARDCODED_USERNAME = "admin";
 const HARDCODED_PASSWORD = "password";
 
@@ -40,10 +48,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [columns, setColumnsState] = useState<string[]>([]);
   const [fileName, setFileNameState] = useState<string | null>(null);
   const [activeDialog, setActiveDialog] = useState<string | null>(null);
-  const [isLoading, setIsLoadingState] = useState<boolean>(false);
+  const [isLoadingState, setIsLoadingStateInner] = useState<boolean>(false); // Renamed to avoid conflict
   const [chatHistory, setChatHistory] = useState<{ role: 'user' | 'assistant'; content: string }[]>([]);
   const [isAuthenticated, setIsAuthenticatedState] = useState<boolean>(false);
-  const [isAuthLoading, setIsAuthLoading] = useState<boolean>(true); // Start as true
+  const [isAuthLoading, setIsAuthLoading] = useState<boolean>(true);
+  const [currentCompanyName, setCurrentCompanyNameState] = useState<string | null>(null);
+
 
   const { toast } = useToast();
   const router = useRouter();
@@ -51,17 +61,26 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
 
   useEffect(() => {
-    // Simulate checking auth status (e.g., from localStorage if implemented later)
-    // For now, just set auth loading to false after a brief delay.
-    // In a real app, this would be an async check.
-    const authCheck = setTimeout(() => {
-      // Example: check localStorage for a token
-      // const storedAuth = localStorage.getItem('isAuthenticated');
-      // setIsAuthenticatedState(storedAuth === 'true');
-      setIsAuthLoading(false);
-    }, 100); // Small delay to mimic async check
+    // App authentication check (e.g. from localStorage if implemented for app-level auth)
+    // For now, we assume if they reach here, they passed /login or auth is not primary concern yet
+    // This is distinct from API token auth
+    const appAuth = localStorage.getItem('appIsAuthenticated'); // Example for future app auth
+    if (appAuth === 'true') {
+      setIsAuthenticatedState(true);
+    }
+    setIsAuthLoading(false); // App auth loading done
 
-    return () => clearTimeout(authCheck);
+    // Load API token and company name from local storage
+    const storedToken = localStorage.getItem(AUTH_TOKEN_STORAGE_KEY);
+    const storedCompany = localStorage.getItem(AUTH_COMPANY_STORAGE_KEY);
+    if (storedToken) {
+      // If there's an API token, we consider the user "authenticated" in the sense of having API access configured
+      // This might be different from app login authentication.
+      // For now, let's keep them linked: if app is authenticated, can configure API.
+    }
+    if (storedCompany) {
+      setCurrentCompanyNameState(storedCompany);
+    }
   }, []);
 
 
@@ -101,7 +120,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const setIsLoading = useCallback((loading: boolean) => {
-    setIsLoadingState(loading);
+    setIsLoadingStateInner(loading);
   }, []);
 
   const showToast = useCallback(
@@ -119,10 +138,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setChatHistory([]);
   }, []);
 
+  // App Login
   const login = useCallback((username: string, pass: string): boolean => {
     if (username === HARDCODED_USERNAME && pass === HARDCODED_PASSWORD) {
       setIsAuthenticatedState(true);
-      // if (typeof window !== 'undefined') localStorage.setItem('isAuthenticated', 'true'); // Example persistence
+      localStorage.setItem('appIsAuthenticated', 'true'); // Example for app auth persistence
       router.push('/');
       return true;
     }
@@ -130,15 +150,52 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     return false;
   }, [router, showToast]);
 
+  // App Logout
   const logout = useCallback(() => {
     setIsAuthenticatedState(false);
-    // if (typeof window !== 'undefined') localStorage.removeItem('isAuthenticated'); // Example persistence
+    localStorage.removeItem('appIsAuthenticated');
+    // Clearing API token on app logout as well for this example
+    clearApiToken(); 
     setChatHistory([]);
     setDataState([]);
     setColumnsState([]);
     setFileNameState(null);
     router.push('/login');
   }, [router]);
+
+  // API Token and Company Name Management
+  const setCurrentCompanyName = useCallback((name: string | null) => {
+    setCurrentCompanyNameState(name);
+    if (name) {
+      localStorage.setItem(AUTH_COMPANY_STORAGE_KEY, name);
+    } else {
+      localStorage.removeItem(AUTH_COMPANY_STORAGE_KEY);
+    }
+  }, []);
+
+  const storeApiToken = useCallback((token: string, companyName?: string | null) => {
+    localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, token);
+    if (companyName) {
+      setCurrentCompanyName(companyName);
+    } else {
+       // If companyName is not provided but we are storing a token,
+       // we should clear any old company name to avoid staleness.
+      setCurrentCompanyName(null);
+    }
+  }, [setCurrentCompanyName]);
+
+  const clearApiToken = useCallback(() => {
+    localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
+    setCurrentCompanyName(null); // Also clears company from localStorage
+  }, [setCurrentCompanyName]);
+  
+  const getApiToken = useCallback(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem(AUTH_TOKEN_STORAGE_KEY);
+    }
+    return null;
+  }, []);
+
 
   return (
     <AppContext.Provider
@@ -152,7 +209,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         activeDialog,
         openDialog,
         closeDialog,
-        isLoading,
+        isLoading: isLoadingState, // Use renamed state
         setIsLoading,
         showToast,
         chatHistory,
@@ -162,6 +219,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         login,
         logout,
         isAuthLoading,
+        currentCompanyName,
+        setCurrentCompanyName,
+        storeApiToken,
+        clearApiToken,
+        getApiToken,
       }}
     >
       {children}
