@@ -13,8 +13,8 @@ import { LogoIcon } from '@/components/icons/LogoIcon';
 import { AmpersandsIcon, Loader2 } from 'lucide-react';
 
 export default function LoginPage() {
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
+  const [username, setUsername] = useState('admin'); // Pre-fill with 'admin'
+  const [password, setPassword] = useState('password'); // Pre-fill with 'password'
   const { login, isAuthenticated, isAuthLoading } = useAppContext();
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -72,7 +72,6 @@ export default function LoginPage() {
                 id="username"
                 type="text"
                 placeholder="admin"
-                defaultValue="admin"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 required
@@ -85,7 +84,6 @@ export default function LoginPage() {
                 id="password"
                 type="password"
                 placeholder="password"
-                defaultValue={"password"}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
