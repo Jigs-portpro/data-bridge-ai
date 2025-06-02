@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useAppContext } from '@/hooks/useAppContext';
@@ -12,7 +13,6 @@ import { ColumnReorderDialog } from '@/components/dialogs/ColumnReorderDialog';
 import { AnomalyReportDialog } from '@/components/dialogs/AnomalyReportDialog';
 import { DuplicateDetectionDialog } from '@/components/dialogs/DuplicateDetectionDialog';
 import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 
 export function AppLayout() {
@@ -22,9 +22,10 @@ export function AppLayout() {
     <SidebarProvider defaultOpen={true}>
       <div className="flex h-screen bg-background">
         <DataToolsSidebar />
-        <SidebarInset className="flex-1 overflow-hidden">
-          <ScrollArea className="h-full">
-            <main className="container mx-auto p-4 md:p-6 lg:p-8 space-y-6">
+        <SidebarInset className="flex-1 flex flex-col overflow-hidden">
+          <main className="container mx-auto p-4 md:p-6 lg:p-8 flex flex-col flex-grow min-h-0 space-y-6">
+            {/* Header Section */}
+            <div className="flex-shrink-0">
               <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
                 <h1 className="text-3xl font-bold font-headline text-primary">DataWise Dashboard</h1>
                 <div className="flex flex-col sm:flex-row items-center gap-2">
@@ -32,11 +33,20 @@ export function AppLayout() {
                   <GoogleSheetInput />
                 </div>
               </div>
-              <Separator />
+            </div>
+            
+            <Separator className="flex-shrink-0" />
+
+            {/* DataTable Section - Takes remaining space and scrolls internally */}
+            <div className="flex-grow min-h-0">
               <DataTable />
+            </div>
+
+            {/* ChatPane Section - Fixed Size at the bottom */}
+            <div className="flex-shrink-0">
               <ChatPane />
-            </main>
-          </ScrollArea>
+            </div>
+          </main>
         </SidebarInset>
       </div>
 

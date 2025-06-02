@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useAppContext } from '@/hooks/useAppContext';
@@ -17,28 +18,32 @@ export function DataTable() {
 
   if (isLoading && data.length === 0) {
     return (
-      <div className="space-y-4 p-4 border rounded-lg shadow-sm bg-card">
-        <Skeleton className="h-8 w-1/4" />
-        <Skeleton className="h-10 w-full" />
-        <Skeleton className="h-10 w-full" />
-        <Skeleton className="h-10 w-full" />
+      <div className="h-full flex flex-col items-center justify-center p-1">
+        <div className="space-y-4 p-4 border rounded-lg shadow-sm bg-card w-full max-w-md">
+          <Skeleton className="h-8 w-1/4" />
+          <Skeleton className="h-10 w-full" />
+          <Skeleton className="h-10 w-full" />
+          <Skeleton className="h-10 w-full" />
+        </div>
       </div>
     );
   }
   
   if (data.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center h-64 border rounded-lg shadow-sm bg-card text-center p-6">
-        <p className="text-lg font-medium text-muted-foreground">No data to display.</p>
-        <p className="text-sm text-muted-foreground">Upload a CSV file to get started.</p>
+      <div className="h-full flex flex-col items-center justify-center p-1">
+        <div className="flex flex-col items-center justify-center h-64 border rounded-lg shadow-sm bg-card text-center p-6">
+          <p className="text-lg font-medium text-muted-foreground">No data to display.</p>
+          <p className="text-sm text-muted-foreground">Upload a file or link a Google Sheet to get started.</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-4 p-1">
-      {fileName && <h2 className="text-xl font-semibold font-headline">Preview: {fileName}</h2>}
-      <ScrollArea className="rounded-md border shadow-sm w-full whitespace-nowrap bg-card">
+    <div className="space-y-4 p-1 h-full flex flex-col">
+      {fileName && <h2 className="text-xl font-semibold font-headline flex-shrink-0">Preview: {fileName}</h2>}
+      <ScrollArea className="rounded-md border shadow-sm w-full whitespace-nowrap bg-card flex-grow min-h-0">
         <Table>
           <TableHeader>
             <TableRow>
