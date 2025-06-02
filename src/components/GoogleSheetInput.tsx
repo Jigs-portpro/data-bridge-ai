@@ -1,3 +1,4 @@
+
 "use client";
 
 import type React from 'react';
@@ -44,7 +45,7 @@ export function GoogleSheetInput() {
     try {
       const response = await fetch(csvExportUrl);
       if (!response.ok) {
-        throw new Error(`Failed to fetch sheet: ${response.statusText}`);
+        throw new Error(`Failed to fetch sheet: ${response.statusText} (Status: ${response.status})`);
       }
       const csvText = await response.text();
       const parsed = parseCSV(csvText);
@@ -60,10 +61,18 @@ export function GoogleSheetInput() {
         description: 'Data from Google Sheet processed successfully.',
       });
     } catch (error) {
-      console.error('Error loading Google Sheet:', error);
+      let description = 'Could not load or process the Google Sheet. Make sure it is public (e.g., "Anyone with the link can view") and the URL is correct.';
+      if (error instanceof Error) {
+        if (error.message.startsWith('Failed to fetch sheet:')) { // Specific error from response.ok check
+            description = `Error: ${error.message}. Please check the URL and sheet permissions.`;
+        } else if (error.message === 'Failed to fetch') { // Generic network error
+            description += ' This can also be due to network issues or CORS restrictions preventing access from your browser.';
+        }
+      }
+      console.error('Error loading Google Sheet:', error, 'Attempted URL:', csvExportUrl);
       showToast({
         title: 'Error Loading Sheet',
-        description: 'Could not load or process the Google Sheet. Make sure it is public and the URL is correct.',
+        description: description,
         variant: 'destructive',
       });
       setData([]);
