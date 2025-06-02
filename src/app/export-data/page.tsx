@@ -16,13 +16,16 @@ import {
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { useAppContext } from '@/hooks/useAppContext';
 import type { ExportEntity, ExportEntityField, ExportConfig } from '@/config/exportEntities';
-import { objectsToCsv } from '@/lib/csvUtils'; // Ensure this is imported
-import { Send, AlertTriangle, Loader2, CheckCircle, DownloadCloud } from 'lucide-react';
+import { objectsToCsv } from '@/lib/csvUtils';
+import { Send, AlertTriangle, Loader2, CheckCircle, DownloadCloud, Sparkles } from 'lucide-react'; // Added Sparkles
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { isValid, parseISO } from 'date-fns';
 import Link from 'next/link';
 import { Separator } from '@/components/ui/separator';
+import { autoColumnMapping, type MappingSuggestion } from '@/ai/flows/auto-column-mapping'; // New AI flow
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'; // For confidence
+
 
 const isValidEmail = (email: string): boolean => {
   if (!email || typeof email !== 'string') return false;
@@ -43,14 +46,14 @@ const isValidDateString = (dateStr: string): boolean => {
     }
   }
   if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
-    const parsed = new Date(dateStr + "T00:00:00Z");
+    const parsed = new Date(dateStr + "T00:00:00Z"); // Treat as UTC to avoid timezone shifts changing date
     return isValid(parsed) && parsed.toISOString().startsWith(dateStr);
   }
   const parsedISO = parseISO(dateStr);
-  return isValid(parsedISO) && dateStr.includes('T');
+  return isValid(parsedISO) && dateStr.includes('T'); // More strictly for ISO full datetime
 };
 
-const AUTH_TOKEN_STORAGE_KEY = 'datawiseAuthToken'; // This should be renamed to dataBridgeAuthToken or similar if you rename globally
+const AUTH_TOKEN_STORAGE_KEY = 'datawiseAuthToken';
 const NOT_MAPPED_VALUE = "__NOT_MAPPED_PLACEHOLDER__";
 
 export default function ExportDataPage() {
@@ -77,8 +80,11 @@ export default function ExportDataPage() {
   const [isDataValid, setIsDataValid] = useState(false);
   
   const [isExporting, setIsExporting] = useState(false);
+  const [isAutoMapping, setIsAutoMapping] = useState(false);
+  const [fieldMappingConfidences, setFieldMappingConfidences] = useState<Record<string, { score: number; reasoning: string } | null>>({});
 
-  const isLoading = appContextIsLoading || isFetchingConfig || isValidating || isExporting;
+
+  const isLoading = appContextIsLoading || isFetchingConfig || isValidating || isExporting || isAutoMapping;
 
   useEffect(() => {
     if (!isAuthLoading && !isAuthenticated) {
@@ -103,7 +109,7 @@ export default function ExportDataPage() {
     } catch (error) {
       console.error("Error fetching entities config:", error);
       showToast({ title: "Config Error", description: "Could not load export entities configuration.", variant: "destructive" });
-      setExportConfig({ baseUrl: '', entities: [] });
+      setExportConfig({ baseUrl: '', entities: [] }); // Default empty config
       setSelectedEntityId('');
     } finally {
       setIsFetchingConfig(false);
@@ -133,11 +139,13 @@ export default function ExportDataPage() {
       setValidationMessages([]);
       setHasValidated(false);
       setIsDataValid(false);
+      setFieldMappingConfidences({}); // Clear confidences when entity changes
     } else if (!selectedEntityId) {
       setFieldMappings({});
       setValidationMessages([]);
       setHasValidated(false);
       setIsDataValid(false);
+      setFieldMappingConfidences({});
     }
    }, [selectedEntityId, appColumns, exportConfig]);
 
@@ -146,7 +154,8 @@ export default function ExportDataPage() {
       ...prev, 
       [targetFieldName]: sourceColumnName === NOT_MAPPED_VALUE ? '' : sourceColumnName 
     }));
-    setHasValidated(false); // Mappings changed, require re-validation
+    setFieldMappingConfidences(prev => ({ ...prev, [targetFieldName]: null })); // Clear AI confidence for this field
+    setHasValidated(false);
     setIsDataValid(false);
     setValidationMessages([]);
   };
@@ -159,7 +168,7 @@ export default function ExportDataPage() {
         errors.push(`Row ${rowIndex + 1}, Target "${targetField.name}": required by API but not mapped.`);
         return;
       }
-      if (!sourceColumnName) return;
+      if (!sourceColumnName) return; // Not mapped, not required, so skip further validation for this field
 
       const value = row[sourceColumnName];
       const stringValue = (value === null || value === undefined) ? '' : String(value).trim();
@@ -168,7 +177,8 @@ export default function ExportDataPage() {
         errors.push(`Row ${rowIndex + 1}, Field "${targetField.name}" (from "${sourceColumnName}"): required by API but source data is empty.`);
       }
 
-      if (stringValue !== '') {
+      // Field-specific validations if value is not empty or if it's required (empty check already done)
+      if (stringValue !== '') { // Only perform type/format checks if there's a value
         switch (targetField.type) {
           case 'string':
           case 'email':
@@ -200,7 +210,10 @@ export default function ExportDataPage() {
             }
             break;
           case 'boolean':
-            if (!['true', 'false', '1', '0', ''].includes(stringValue.toLowerCase())) errors.push(`Row ${rowIndex + 1}, "${targetField.name}" (from "${sourceColumnName}"): should be boolean (true/false, 1/0). Found "${stringValue}".`);
+            // Allow empty strings for non-required booleans, they will be transformed to null
+            if (stringValue !== '' && !['true', 'false', '1', '0'].includes(stringValue.toLowerCase())) {
+                 errors.push(`Row ${rowIndex + 1}, "${targetField.name}" (from "${sourceColumnName}"): should be boolean (true/false, 1/0). Found "${stringValue}".`);
+            }
             break;
           case 'date':
             if (!isValidDateString(stringValue)) errors.push(`Row ${rowIndex + 1}, "${targetField.name}" (from "${sourceColumnName}"): not a valid date. Examples: YYYY-MM-DD, MM/DD/YYYY. Found "${stringValue}".`);
@@ -226,9 +239,10 @@ export default function ExportDataPage() {
     setAppContextIsLoading(true);
     setValidationMessages([]);
 
-    let allValidationErrors: string[] = [];
+    // Give UI a chance to update (show loader)
     await new Promise(resolve => setTimeout(resolve, 0)); 
 
+    let allValidationErrors: string[] = [];
     appData.forEach((row, index) => {
       if (allValidationErrors.length < 200) { // Limit displayed errors
         const rowErrors = validateSingleRow(row, index, selectedEntity.fields);
@@ -267,28 +281,52 @@ export default function ExportDataPage() {
         if (sourceColumnName && appColumns.includes(sourceColumnName)) {
            let valueToTransform = row[sourceColumnName];
            const stringValue = (valueToTransform === null || valueToTransform === undefined) ? '' : String(valueToTransform).trim();
-           if (targetField.type === 'boolean') valueToTransform = stringValue.toLowerCase() === 'true' || stringValue === '1';
-           else if (targetField.type === 'number' && stringValue !== '') valueToTransform = isNaN(parseFloat(stringValue)) ? null : parseFloat(stringValue);
-           else if (targetField.type === 'date' && stringValue !== '') {
-             const commonFormatMatch = stringValue.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
-             if (commonFormatMatch) {
-                const d = new Date(parseInt(commonFormatMatch[3]), parseInt(commonFormatMatch[1]) - 1, parseInt(commonFormatMatch[2]));
-                if(isValid(d)) valueToTransform = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-                else valueToTransform = stringValue;
-             } else if (stringValue.match(/^\d{4}-\d{2}-\d{2}$/)) valueToTransform = stringValue;
-             else if (isValid(parseISO(stringValue)) && stringValue.includes('T')) valueToTransform = stringValue.split('T')[0];
-             else valueToTransform = stringValue;
-           } else if (stringValue === '' && !targetField.required) valueToTransform = null; 
-           else valueToTransform = stringValue; 
-           transformedRow[targetField.name] = valueToTransform;
+           
+           if (stringValue === '' && !targetField.required) {
+             transformedRow[targetField.name] = null; // Set to null if empty and not required
+           } else {
+             switch (targetField.type) {
+                case 'boolean':
+                    transformedRow[targetField.name] = stringValue.toLowerCase() === 'true' || stringValue === '1';
+                    break;
+                case 'number':
+                    const num = parseFloat(stringValue);
+                    transformedRow[targetField.name] = isNaN(num) ? (targetField.required ? 0 : null) : num; // Default to 0 if required & NaN, else null
+                    break;
+                case 'date':
+                    if (isValidDateString(stringValue)) {
+                        // Standardize to YYYY-MM-DD
+                        const commonFormatMatch = stringValue.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+                        if (commonFormatMatch) {
+                            const d = new Date(parseInt(commonFormatMatch[3]), parseInt(commonFormatMatch[1]) - 1, parseInt(commonFormatMatch[2]));
+                            if(isValid(d)) transformedRow[targetField.name] = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+                            else transformedRow[targetField.name] = stringValue; // Keep original if parsing to standard fails
+                        } else if (stringValue.match(/^\d{4}-\d{2}-\d{2}$/)) {
+                           transformedRow[targetField.name] = stringValue;
+                        } else if (isValid(parseISO(stringValue)) && stringValue.includes('T')) {
+                           transformedRow[targetField.name] = stringValue.split('T')[0];
+                        } else {
+                           transformedRow[targetField.name] = stringValue; // Keep if not a recognized transformable format
+                        }
+                    } else {
+                        transformedRow[targetField.name] = targetField.required ? stringValue : null; // Keep invalid date if required, else null
+                    }
+                    break;
+                default: // string, email
+                    transformedRow[targetField.name] = stringValue;
+             }
+           }
         } else if (targetField.required) {
-          transformedRow[targetField.name] = null; // Or some default, though validation should catch unmapped requireds
+          // This should ideally be caught by validation, but as a fallback:
+          transformedRow[targetField.name] = null; // Or appropriate default for type if required and unmapped
+        } else {
+          transformedRow[targetField.name] = null; // Unmapped and not required
         }
       });
-      // Only include fields defined in the target entity for the export
+      // Ensure only fields defined in the target entity are included
       const finalRowForExport: Record<string, any> = {};
-      selectedEntity.fields.forEach(tf => {
-        finalRowForExport[tf.name] = transformedRow[tf.name];
+       selectedEntity.fields.forEach(tf => {
+        finalRowForExport[tf.name] = transformedRow.hasOwnProperty(tf.name) ? transformedRow[tf.name] : null;
       });
       return finalRowForExport;
     });
@@ -318,10 +356,22 @@ export default function ExportDataPage() {
     const fullApiUrl = (baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl) + (selectedEntity.url.startsWith('/') ? selectedEntity.url : '/' + selectedEntity.url);
 
     try {
+      // Simulate API call
       console.log(`Simulating API export to: ${fullApiUrl}`);
-      console.log('Request Headers:', JSON.parse(JSON.stringify(requestHeaders)));
+      console.log('Request Headers:', JSON.parse(JSON.stringify(requestHeaders))); // Avoid logging Bearer token directly in production logs
       console.log('Export Payload for API:', JSON.stringify(payload, null, 2));
+      
+      // Mock API call
       await new Promise(resolve => setTimeout(resolve, 1000)); 
+
+      // Example: const response = await fetch(fullApiUrl, { method: 'POST', headers: requestHeaders, body: JSON.stringify(payload) });
+      // if (!response.ok) {
+      //   const errorData = await response.json().catch(() => ({ message: `API request failed with status ${response.status}` }));
+      //   throw new Error(errorData.message || `API request failed with status ${response.status}`);
+      // }
+      // const responseData = await response.json();
+      // showToast({ title: 'API Export Successful', description: `Data for "${selectedEntity.name}" sent. Response: ${JSON.stringify(responseData)}` });
+
       showToast({ title: 'API Export "Simulated"', description: `Data for "${selectedEntity.name}" prepared for API. Check browser console.` });
     } catch (error: any) {
       setValidationMessages([`API Export Error: ${error.message || 'An unknown error occurred.'}`]);
@@ -346,7 +396,7 @@ export default function ExportDataPage() {
 
     try {
       const dataToExport = transformDataForExport();
-      const headersForCsv = selectedEntity.fields.map(f => f.name);
+      const headersForCsv = selectedEntity.fields.map(f => f.name); // Use target field names as CSV headers
       const csvString = objectsToCsv(headersForCsv, dataToExport);
 
       const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
@@ -370,12 +420,51 @@ export default function ExportDataPage() {
     }
   };
 
+  const handleAutoMapColumns = async () => {
+      if (!selectedEntityConfig || !appColumns.length) {
+        showToast({ title: "Cannot Auto-map", description: "Please select an entity and ensure data columns are loaded.", variant: "destructive" });
+        return;
+      }
+      setIsAutoMapping(true);
+      setAppContextIsLoading(true);
+      try {
+        const targetFieldsForAI = selectedEntityConfig.fields.map(f => ({ name: f.name, type: f.type || 'string' }));
+        const result = await autoColumnMapping({ sourceColumnNames: appColumns, targetFields: targetFieldsForAI });
+        
+        const newMappings: Record<string, string> = { }; // Start fresh or merge? For AI, usually start fresh.
+        const newConfidences: Record<string, { score: number; reasoning: string } | null> = {};
+
+        result.mappings.forEach(suggestion => {
+          newMappings[suggestion.targetFieldName] = suggestion.suggestedSourceColumn || ''; // Store empty string if null
+          newConfidences[suggestion.targetFieldName] = suggestion.suggestedSourceColumn ? { score: suggestion.confidenceScore, reasoning: suggestion.reasoning } : null;
+        });
+
+        setFieldMappings(newMappings);
+        setFieldMappingConfidences(newConfidences);
+        setHasValidated(false); // Require re-validation after auto-mapping
+        setIsDataValid(false);
+        setValidationMessages([]);
+        showToast({ title: "Auto-mapping Complete", description: "Review the AI-suggested mappings." });
+      } catch (error: any) {
+        console.error("Error auto-mapping columns:", error);
+        const errorMessage = error?.message?.toLowerCase();
+        let desc = "Could not generate AI column mappings.";
+        if (errorMessage?.includes('503') || errorMessage?.includes('unavailable') || errorMessage?.includes('overloaded')) {
+            desc = "AI service for auto-mapping is currently overloaded or unavailable. Please try again later.";
+        }
+        showToast({ title: "Auto-map Error", description: desc, variant: "destructive" });
+      } finally {
+        setIsAutoMapping(false);
+        setAppContextIsLoading(false);
+      }
+    };
+
 
   const selectedEntityConfig = exportConfig?.entities.find(e => e.id === selectedEntityId);
   const noEntitiesConfigured = !exportConfig || exportConfig.entities.length === 0;
   const noDataLoaded = appData.length === 0;
 
-  if (isAuthLoading && !isAuthenticated) {
+  if (isAuthLoading && !isAuthenticated) { // Ensure this only blocks if auth is truly loading
     return (
       <AppLayout pageTitle="Loading Export Data...">
         <div className="flex h-full items-center justify-center">
@@ -423,16 +512,47 @@ export default function ExportDataPage() {
 
                     {selectedEntityConfig && (
                         <div>
-                            <h4 className="text-md font-semibold mb-3 text-center md:text-left">Map Columns for "{selectedEntityConfig.name}"</h4>
+                            <div className="flex justify-between items-center mb-3">
+                                <h4 className="text-md font-semibold text-center md:text-left">Map Columns for "{selectedEntityConfig.name}"</h4>
+                                <Button 
+                                    onClick={handleAutoMapColumns} 
+                                    disabled={isLoading || !selectedEntityConfig || noDataLoaded || appColumns.length === 0 || isAutoMapping} 
+                                    variant="outline"
+                                    size="sm"
+                                >
+                                    {isAutoMapping ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Sparkles className="mr-2 h-4 w-4" />}
+                                    Auto-map (AI)
+                                </Button>
+                            </div>
                             <ScrollArea className="max-h-72 border rounded-md p-4">
                                 <div className="space-y-3">
-                                    {selectedEntityConfig.fields.map(targetField => (
+                                <TooltipProvider>
+                                    {selectedEntityConfig.fields.map(targetField => {
+                                        const confidence = fieldMappingConfidences[targetField.name];
+                                        let confidenceColorClass = 'bg-muted'; // Default for no score or unmapped
+                                        let confidenceTooltip = 'No AI mapping or manually changed.';
+                                        if (confidence) {
+                                            if (confidence.score > 90) confidenceColorClass = 'bg-green-500';
+                                            else if (confidence.score > 70) confidenceColorClass = 'bg-yellow-500';
+                                            else confidenceColorClass = 'bg-red-500';
+                                            confidenceTooltip = `AI Confidence: ${confidence.score}%. Reasoning: ${confidence.reasoning}`;
+                                        }
+
+                                        return (
                                         <div key={targetField.name} className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-1 items-center">
-                                            <Label htmlFor={`map-${targetField.name}`} className="text-sm md:text-right truncate" title={`${targetField.name} (${targetField.type || 'any'})`}>
-                                                {targetField.name}
-                                                {targetField.required ? <span className="text-destructive ml-1">*</span> : ''}
-                                                <span className="text-xs text-muted-foreground ml-1">({targetField.type || 'any'})</span>
-                                            </Label>
+                                            <div className="flex items-center gap-2 md:justify-end">
+                                                <Tooltip>
+                                                    <TooltipTrigger asChild>
+                                                        <span className={`h-3 w-3 rounded-full inline-block flex-shrink-0 ${confidenceColorClass}`} />
+                                                    </TooltipTrigger>
+                                                    <TooltipContent><p>{confidenceTooltip}</p></TooltipContent>
+                                                </Tooltip>
+                                                <Label htmlFor={`map-${targetField.name}`} className="text-sm truncate" title={`${targetField.name} (${targetField.type || 'any'})`}>
+                                                    {targetField.name}
+                                                    {targetField.required ? <span className="text-destructive ml-1">*</span> : ''}
+                                                    <span className="text-xs text-muted-foreground ml-1">({targetField.type || 'any'})</span>
+                                                </Label>
+                                            </div>
                                             <Select 
                                                 value={fieldMappings[targetField.name] || NOT_MAPPED_VALUE} 
                                                 onValueChange={(sourceCol) => handleMappingChange(targetField.name, sourceCol)} 
@@ -445,7 +565,9 @@ export default function ExportDataPage() {
                                                 </SelectContent>
                                             </Select>
                                         </div>
-                                    ))}
+                                        );
+                                    })}
+                                    </TooltipProvider>
                                 </div>
                             </ScrollArea>
                             <p className="text-xs text-muted-foreground mt-2"><span className="text-destructive">*</span> Target API field is required and must be mapped.</p>
@@ -515,7 +637,7 @@ export default function ExportDataPage() {
                 <CardContent className="flex flex-col sm:flex-row gap-4">
                     <Button 
                         onClick={handleExportToApi} 
-                        disabled={isLoading || !hasValidated || !isDataValid || !selectedEntityConfig}
+                        disabled={isLoading || !hasValidated || !isDataValid || !selectedEntityConfig || noDataLoaded}
                         className="w-full sm:w-auto"
                     >
                         {isExporting && appContextIsLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Send className="mr-2 h-4 w-4" />}
@@ -524,7 +646,7 @@ export default function ExportDataPage() {
                     <Button 
                         onClick={handleExportToCsv} 
                         variant="outline"
-                        disabled={isLoading || !hasValidated || !isDataValid || !selectedEntityConfig}
+                        disabled={isLoading || !hasValidated || !isDataValid || !selectedEntityConfig || noDataLoaded}
                         className="w-full sm:w-auto"
                     >
                         {isExporting && appContextIsLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <DownloadCloud className="mr-2 h-4 w-4" />}
@@ -533,7 +655,7 @@ export default function ExportDataPage() {
                 </CardContent>
                  <CardFooter>
                     <p className="text-xs text-muted-foreground">
-                        Export buttons are enabled after successful validation.
+                        Export buttons are enabled after successful validation of loaded data.
                         API export is currently simulated; check browser console for payload.
                     </p>
                 </CardFooter>
