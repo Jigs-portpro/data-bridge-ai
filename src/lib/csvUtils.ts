@@ -1,61 +1,174 @@
+
 export type ParsedCSV = {
   headers: string[];
-  rows: Record<string, any>[]; // Changed to any to better support mixed types from Excel
+  rows: Record<string, any>[];
 };
 
-export function parseCSV(csvString: string): ParsedCSV {
-  const lines = csvString.trim().split(/\r\n|\n/);
-  if (lines.length === 0) return { headers: [], rows: [] };
+// Helper function to parse a single CSV row (handles basic quoting)
+function parseCsvRow(rowString: string): string[] {
+  const values: string[] = [];
+  let inQuotes = false;
+  let currentValue = '';
+  let charIndex = 0;
 
-  const headers = lines[0].split(',').map(header => header.trim());
-  const rows = lines.slice(1).map(line => {
-    // Basic CSV parsing, doesn't handle commas within quoted fields well.
-    // For robust parsing, a library might be needed if data is complex.
-    // This regex aims to handle quoted fields containing commas.
-    const values = [];
-    let currentMatch;
-    const regex = /(?:\"([^\"]*(?:\"\"[^\"]*)*)\"|([^\",]+)|(,))|(?:,|$)/g;
-    let lastIndex = 0;
+  while (charIndex < rowString.length) {
+    const char = rowString[charIndex];
 
-    // Split line by comma, respecting quotes
-    // This is a simplified parser; a more robust CSV parser might be needed for complex CSVs.
-    const roughSplit = line.split(','); 
-    const processedValues: string[] = [];
-    let inQuotes = false;
-    let currentValue = '';
-
-    for (const part of roughSplit) {
-      if (!inQuotes) {
-        if (part.startsWith('"') && !part.endsWith('"')) {
-          inQuotes = true;
-          currentValue = part.substring(1);
-        } else if (part.startsWith('"') && part.endsWith('"')) {
-          processedValues.push(part.substring(1, part.length -1).replace(/""/g, '"'));
-        }
-         else {
-          processedValues.push(part.replace(/""/g, '"'));
+    if (inQuotes) {
+      if (char === '"') {
+        if (charIndex + 1 < rowString.length && rowString[charIndex + 1] === '"') {
+          // Escaped quote
+          currentValue += '"';
+          charIndex++;
+        } else {
+          // End of quoted field
+          inQuotes = false;
         }
       } else {
-        currentValue += ',' + part;
-        if (part.endsWith('"')) {
-          inQuotes = false;
-          processedValues.push(currentValue.substring(0, currentValue.length -1).replace(/""/g, '"'));
-          currentValue = '';
-        }
+        currentValue += char;
+      }
+    } else {
+      if (char === '"') {
+        inQuotes = true;
+      } else if (char === ',') {
+        values.push(currentValue.trim());
+        currentValue = '';
+      } else {
+        currentValue += char;
       }
     }
-    if (currentValue) { // Add any remaining part if line ends mid-quote (though unusual)
-        processedValues.push(currentValue);
+    charIndex++;
+  }
+  values.push(currentValue.trim()); // Add the last value
+  return values;
+}
+
+// Helper to find the actual start of data (header row index and header content)
+// rows: array of string arrays (each string array is a row with cells)
+// maxSearchDepth: how many initial non-blank rows to check for a header
+export function findActualDataStart(
+  allRowsAsArrays: string[][],
+  maxSearchDepth = 10
+): { dataStartIndex: number; headers: string[] } {
+  if (allRowsAsArrays.length === 0) return { dataStartIndex: 0, headers: [] };
+
+  let actualDataStartIndex = 0;
+  let foundHeaders: string[] = [];
+
+  // Find first row that is not completely empty
+  let firstPotentiallyContentfulRowIndex = -1;
+  for (let i = 0; i < allRowsAsArrays.length; i++) {
+    if (allRowsAsArrays[i].some(cell => cell.trim() !== '')) {
+      firstPotentiallyContentfulRowIndex = i;
+      break;
+    }
+  }
+
+  if (firstPotentiallyContentfulRowIndex === -1) { // All rows are blank or effectively empty
+    return { dataStartIndex: allRowsAsArrays.length, headers: [] };
+  }
+
+  // If only one contentful row, assume it's headers
+  if (firstPotentiallyContentfulRowIndex === allRowsAsArrays.length - 1) {
+    return { dataStartIndex: firstPotentiallyContentfulRowIndex, headers: allRowsAsArrays[firstPotentiallyContentfulRowIndex] };
+  }
+  
+  const searchEndIndex = Math.min(firstPotentiallyContentfulRowIndex + maxSearchDepth, allRowsAsArrays.length -1);
+
+  for (let i = firstPotentiallyContentfulRowIndex; i <= searchEndIndex; i++) {
+    const potentialHeaderCells = allRowsAsArrays[i];
+    if (potentialHeaderCells.length === 0 || potentialHeaderCells.every(cell => cell.trim() === '')) {
+      continue; // Skip fully empty or effectively empty rows within search depth
+    }
+
+    // Look at the next row to gauge consistency, if it exists
+    const nextRowCells = (i + 1 < allRowsAsArrays.length) ? allRowsAsArrays[i + 1] : null;
+
+    // Heuristic 1: Column count consistency.
+    // A header should have a reasonable number of columns (>1 usually).
+    // And it should be somewhat consistent with the next row if data follows.
+    let colCountScore = 0;
+    if (potentialHeaderCells.length > 1) colCountScore += 1;
+    if (nextRowCells && nextRowCells.length > 0) {
+      // Allow some flexibility: next row can have slightly fewer or more columns
+      if (Math.abs(potentialHeaderCells.length - nextRowCells.length) <= Math.max(2, potentialHeaderCells.length * 0.3)) {
+        colCountScore += 2;
+      } else if (nextRowCells.length >= potentialHeaderCells.length * 0.5) { // next row is not drastically shorter
+        colCountScore +=1;
+      }
+    } else if (potentialHeaderCells.length > 1) { // No next row, but header has multiple columns
+       colCountScore +=1; // Weaker signal
     }
 
 
-    const row: Record<string, string> = {};
-    headers.forEach((header, index) => {
-      row[header] = processedValues[index]?.trim() || '';
+    // Heuristic 2: Header-like content (mostly non-numeric strings)
+    let nonNumericStringCells = 0;
+    let nonEmptyCells = 0;
+    potentialHeaderCells.forEach(cell => {
+      const trimmedCell = String(cell).trim();
+      if (trimmedCell !== '') nonEmptyCells++;
+      if (trimmedCell !== '' && isNaN(Number(trimmedCell))) {
+        nonNumericStringCells++;
+      }
     });
-    return row;
-  });
-  return { headers, rows };
+    
+    let contentScore = 0;
+    if (nonEmptyCells > 0 && (nonNumericStringCells / nonEmptyCells) >= 0.6) { // At least 60% non-numeric
+      contentScore += 2;
+    } else if (nonEmptyCells > 0) {
+      contentScore +=1;
+    }
+    
+    // If both scores are decent, consider this the header
+    if (colCountScore >= 2 && contentScore >= 2) {
+      actualDataStartIndex = i;
+      foundHeaders = potentialHeaderCells;
+      return { dataStartIndex: actualDataStartIndex, headers: foundHeaders };
+    }
+  }
+
+  // Fallback: If no "intelligent" header found after search, use the first potentially contentful row.
+  actualDataStartIndex = firstPotentiallyContentfulRowIndex;
+  foundHeaders = allRowsAsArrays[actualDataStartIndex];
+  return { dataStartIndex: actualDataStartIndex, headers: foundHeaders };
+}
+
+
+export function parseCSV(csvString: string): ParsedCSV {
+  const allLinesRaw = csvString.trim().split(/\r\n|\n/);
+  if (allLinesRaw.length === 0) return { headers: [], rows: [] };
+
+  const allRowsAsArrays = allLinesRaw.map(line => parseCsvRow(line));
+  
+  const { dataStartIndex, headers: finalHeaders } = findActualDataStart(allRowsAsArrays);
+
+  if (finalHeaders.length === 0) {
+    return { headers: [], rows: [] };
+  }
+
+  const dataContentLines = allRowsAsArrays.slice(dataStartIndex + 1);
+
+  const rows = dataContentLines
+    .map(values => {
+      // Skip rows that are completely empty after parsing
+      if (values.every(val => val.trim() === '')) return null;
+
+      const row: Record<string, string> = {};
+      finalHeaders.forEach((header, index) => {
+        row[header] = values[index]?.trim() || '';
+      });
+      
+      // Basic check: if a row has drastically fewer values than headers, it might be a footer or irrelevant.
+      // Only apply this if headers are more than a couple.
+      const nonEmptyValuesInRow = values.filter(v => v.trim() !== '').length;
+      if (finalHeaders.length > 2 && nonEmptyValuesInRow < finalHeaders.length * 0.5 && nonEmptyValuesInRow < 2) {
+        return null;
+      }
+      return row;
+    })
+    .filter(row => row !== null) as Record<string, any>[];
+
+  return { headers: finalHeaders, rows };
 }
 
 export function objectsToCsv(headers: string[], data: Record<string, any>[]): string {
@@ -65,16 +178,20 @@ export function objectsToCsv(headers: string[], data: Record<string, any>[]): st
   if (!headers || headers.length === 0) {
      headers = Object.keys(data[0]);
   }
-  const headerRow = headers.join(',');
+  
+  const escapeCsvCell = (value: any): string => {
+    const strValue = (value === null || typeof value === 'undefined') ? '' : String(value);
+    if (strValue.includes(',') || strValue.includes('\n') || strValue.includes('"')) {
+      return `"${strValue.replace(/"/g, '""')}"`;
+    }
+    return strValue;
+  };
+
+  const headerRow = headers.map(escapeCsvCell).join(',');
   const dataRows = data.map(row => 
-    headers.map(header => {
-      const value = row[header] === null || typeof row[header] === 'undefined' ? '' : String(row[header]);
-      // Escape commas, newlines, and quotes within values by quoting
-      if (value.includes(',') || value.includes('\n') || value.includes('"')) {
-        return `"${value.replace(/"/g, '""')}"`;
-      }
-      return value;
-    }).join(',')
+    headers.map(header => escapeCsvCell(row[header])).join(',')
   );
   return [headerRow, ...dataRows].join('\n');
 }
+
+    

@@ -1,3 +1,4 @@
+
 "use client";
 
 import type React from 'react';
@@ -5,7 +6,7 @@ import { useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { UploadCloud } from 'lucide-react';
 import { useAppContext } from '@/hooks/useAppContext';
-import { parseCSV } from '@/lib/csvUtils';
+import { parseCSV, findActualDataStart } from '@/lib/csvUtils'; // Import findActualDataStart
 import * as XLSX from 'xlsx';
 
 export function FileUploadButton() {
@@ -19,7 +20,7 @@ export function FileUploadButton() {
       const validXlsType = 'application/vnd.ms-excel';
       const validXlsxType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 
-      if (![validCsvType, validXlsType, validXlsxType].includes(file.type)) {
+      if (![validCsvType, validXlsType, validXlsxType].includes(file.type) && !file.name.endsWith('.csv') && !file.name.endsWith('.xls') && !file.name.endsWith('.xlsx')) {
         showToast({
           title: 'Invalid File Type',
           description: 'Please upload a CSV or Excel file (.csv, .xls, .xlsx).',
@@ -40,22 +41,59 @@ export function FileUploadButton() {
       reader.onload = (e) => {
         try {
           const fileContent = e.target?.result;
-          let parsedRows: Record<string, any>[] = [];
+          let parsedDataRows: Record<string, any>[] = [];
+          let finalHeaders: string[] = [];
 
-          if (file.type === validCsvType) {
-            parsedRows = parseCSV(fileContent as string).rows;
-          } else if (file.type === validXlsType || file.type === validXlsxType) {
+          if (file.type === validCsvType || file.name.endsWith('.csv')) {
+            const parsedResult = parseCSV(fileContent as string);
+            parsedDataRows = parsedResult.rows;
+            finalHeaders = parsedResult.headers; // parseCSV now returns headers correctly
+          } else if (file.type === validXlsType || file.type === validXlsxType || file.name.endsWith('.xls') || file.name.endsWith('.xlsx')) {
             const workbook = XLSX.read(fileContent, { type: 'array' });
             const firstSheetName = workbook.SheetNames[0];
             const worksheet = workbook.Sheets[firstSheetName];
-            parsedRows = XLSX.utils.sheet_to_json<Record<string, any>>(worksheet);
+            
+            // Get all rows as arrays of values, converting all to strings for consistent processing
+            const allSheetRowsMixedTypes: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1, raw: false, blankrows: true });
+            const allSheetRowsAsStrings: string[][] = allSheetRowsMixedTypes.map(row => 
+              row.map(cell => (cell === null || cell === undefined) ? "" : String(cell).trim())
+            );
+
+            const { dataStartIndex, headers: detectedHeaders } = findActualDataStart(allSheetRowsAsStrings);
+            finalHeaders = detectedHeaders;
+
+            if (finalHeaders.length > 0) {
+              const dataContentRows = allSheetRowsAsStrings.slice(dataStartIndex + 1);
+              parsedDataRows = dataContentRows.map(rowArray => {
+                const row: Record<string, any> = {};
+                finalHeaders.forEach((header, index) => {
+                  // Try to use original type from mixed types if available, fallback to string
+                  const originalRow = allSheetRowsMixedTypes[dataStartIndex + 1 + dataContentRows.indexOf(rowArray)];
+                  row[header] = originalRow && originalRow[index] !== undefined ? originalRow[index] : rowArray[index] ?? '';
+                });
+                // Filter out rows that might be all empty after header mapping
+                if(Object.values(row).every(val => val === '')) return null;
+                return row;
+              }).filter(row => row !== null) as Record<string, any>[];
+            } else {
+               parsedDataRows = []; // No headers found means no structured data
+            }
           }
           
-          setData(parsedRows);
-          showToast({
-            title: 'File Uploaded',
-            description: `${file.name} processed successfully.`,
-          });
+          if (finalHeaders.length === 0 && parsedDataRows.length === 0) {
+            showToast({
+              title: 'No Data Found',
+              description: 'Could not find any structured data in the file.',
+            });
+             setData([]); // Ensure data is cleared
+          } else {
+            setData(parsedDataRows); // This will also update columns via context
+             showToast({
+              title: 'File Uploaded',
+              description: `${file.name} processed successfully.`,
+            });
+          }
+
         } catch (error) {
           console.error('Error parsing file:', error);
           showToast({
@@ -79,7 +117,7 @@ export function FileUploadButton() {
         setIsLoading(false);
       };
 
-      if (file.type === validCsvType) {
+      if (file.type === validCsvType || file.name.endsWith('.csv')) {
         reader.readAsText(file);
       } else {
         reader.readAsArrayBuffer(file);
@@ -100,7 +138,7 @@ export function FileUploadButton() {
         type="file"
         ref={fileInputRef}
         onChange={handleFileChange}
-        accept=".csv, application/vnd.ms-excel, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        accept=".csv,.xls,.xlsx,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv"
         className="hidden"
         data-ai-hint="file input"
       />
@@ -111,3 +149,5 @@ export function FileUploadButton() {
     </>
   );
 }
+
+    
