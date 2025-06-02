@@ -1,3 +1,4 @@
+
 "use client";
 
 import { Button } from '@/components/ui/button';
@@ -9,8 +10,8 @@ import {
   Shuffle,
   Siren,
   CopyCheck,
-  MessageCircle,
   Github,
+  LogOut,
 } from 'lucide-react';
 import {
   Sidebar,
@@ -20,9 +21,6 @@ import {
   SidebarMenu,
   SidebarMenuItem,
   SidebarMenuButton,
-  SidebarMenuSub,
-  SidebarMenuSubItem,
-  SidebarMenuSubButton,
   SidebarSeparator,
   SidebarGroup,
   SidebarGroupLabel,
@@ -39,7 +37,7 @@ const toolConfig = [
 ];
 
 export function DataToolsSidebar() {
-  const { openDialog, data } = useAppContext();
+  const { openDialog, data, isAuthenticated, logout } = useAppContext();
   const isDataLoaded = data.length > 0;
 
   return (
@@ -60,7 +58,7 @@ export function DataToolsSidebar() {
                             <SidebarMenuItem key={tool.id}>
                             <SidebarMenuButton
                                 onClick={() => openDialog(tool.id)}
-                                disabled={!isDataLoaded}
+                                disabled={!isDataLoaded || !isAuthenticated}
                                 tooltip={{children: tool.name, side:"right", align:"center"}}
                                 className="justify-start"
                             >
@@ -75,6 +73,15 @@ export function DataToolsSidebar() {
           </SidebarMenu>
         </SidebarContent>
         <SidebarFooter className="p-4 mt-auto group-data-[collapsible=icon]:p-2">
+            {isAuthenticated && (
+              <>
+                <Button variant="ghost" onClick={logout} className="w-full justify-start group-data-[collapsible=icon]:justify-center mb-2">
+                    <LogOut className="h-5 w-5" />
+                    <span className="group-data-[collapsible=icon]:hidden ml-2">Logout</span>
+                </Button>
+                <SidebarSeparator className="my-1 group-data-[collapsible=icon]:mx-0"/>
+              </>
+            )}
             <Button variant="ghost" className="w-full justify-start group-data-[collapsible=icon]:justify-center" asChild>
                 <a href="https://github.com/firebase/genkit/tree/main/studio" target="_blank" rel="noopener noreferrer">
                     <Github className="h-5 w-5" />
@@ -85,3 +92,4 @@ export function DataToolsSidebar() {
       </Sidebar>
   );
 }
+
