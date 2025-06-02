@@ -34,11 +34,7 @@ const isValidEmail = (email: string): boolean => {
 
 const isValidDateString = (dateStr: string): boolean => {
   if (!dateStr || typeof dateStr !== 'string') return false;
-  // Try common formats first
-  if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) { // YYYY-MM-DD
-     const parsed = new Date(dateStr + "T00:00:00Z"); // Assume UTC if no timezone
-     return isValid(parsed) && parsed.toISOString().startsWith(dateStr);
-  }
+  
   // MM/DD/YYYY or MM-DD-YYYY
   const commonFormatMatch = dateStr.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
   if (commonFormatMatch) {
@@ -50,12 +46,18 @@ const isValidDateString = (dateStr: string): boolean => {
         return isValid(parsed) && parsed.getFullYear() === year && parsed.getMonth() === month -1 && parsed.getDate() === day;
     }
   }
-  // Fallback to parseISO for full ISO strings or other complex cases
+  // Try YYYY-MM-DD last before generic parseISO because parseISO is too lenient with partials
+   if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) { 
+     const parsed = new Date(dateStr + "T00:00:00Z"); // Assume UTC if no timezone to avoid off-by-one day issues
+     return isValid(parsed) && parsed.toISOString().startsWith(dateStr);
+  }
+  // Fallback to parseISO for full ISO strings or other complex cases only if other checks fail
   const parsedISO = parseISO(dateStr);
-  return isValid(parsedISO);
+  return isValid(parsedISO) && dateStr.includes('T'); // Stricter check for ISO if it reaches here
 };
 
 const AUTH_TOKEN_STORAGE_KEY = 'datawiseAuthToken';
+const NOT_MAPPED_VALUE = "__NOT_MAPPED_PLACEHOLDER__";
 
 
 export function ExportDataDialog() {
@@ -96,7 +98,7 @@ export function ExportDataDialog() {
     } catch (error) {
       console.error("Error fetching entities config:", error);
       showToast({ title: "Config Error", description: "Could not load export entities configuration.", variant: "destructive" });
-      setExportConfig({ baseUrl: '', entities: [] });
+      setExportConfig({ baseUrl: '', entities: [] }); // Ensure exportConfig is not null
       setSelectedEntityId('');
     } finally {
       setIsFetchingConfig(false);
@@ -135,7 +137,10 @@ export function ExportDataDialog() {
    }, [selectedEntityId, appColumns, activeDialog, exportConfig]);
 
   const handleMappingChange = (targetFieldName: string, sourceColumnName: string) => {
-    setFieldMappings(prev => ({ ...prev, [targetFieldName]: sourceColumnName }));
+    setFieldMappings(prev => ({ 
+      ...prev, 
+      [targetFieldName]: sourceColumnName === NOT_MAPPED_VALUE ? '' : sourceColumnName 
+    }));
     setValidationMessages([]);
   };
 
@@ -201,7 +206,7 @@ export function ExportDataDialog() {
             break;
           case 'date':
             if (!isValidDateString(stringValue)) {
-              errors.push(`Row ${rowIndex + 1}, "${targetField.name}" (from "${sourceColumnName}"): not a valid date (e.g. YYYY-MM-DD or MM/DD/YYYY). Found "${stringValue}".`);
+              errors.push(`Row ${rowIndex + 1}, "${targetField.name}" (from "${sourceColumnName}"): not a valid date. Examples: YYYY-MM-DD, MM/DD/YYYY. Found "${stringValue}".`);
             }
             break;
         }
@@ -270,15 +275,34 @@ export function ExportDataDialog() {
               const num = parseFloat(stringValue);
               valueToTransform = isNaN(num) ? null : num;
            } else if (targetField.type === 'date' && stringValue !== '') {
-             valueToTransform = stringValue; // API should handle date string format
+             // Format date to YYYY-MM-DD if it's a valid common format, otherwise pass as is if parseISO liked it.
+             // The API should ideally handle various date formats, but YYYY-MM-DD is safest.
+             const commonFormatMatch = stringValue.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+             if (commonFormatMatch) {
+                const month = parseInt(commonFormatMatch[1], 10);
+                const day = parseInt(commonFormatMatch[2], 10);
+                const year = parseInt(commonFormatMatch[3], 10);
+                const d = new Date(year, month -1, day);
+                if(isValid(d)) {
+                    valueToTransform = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+                } else {
+                     valueToTransform = stringValue; // keep original if specific transform fails
+                }
+             } else if (stringValue.match(/^\d{4}-\d{2}-\d{2}$/)) {
+                valueToTransform = stringValue; // Already in desired format
+             } else if (isValid(parseISO(stringValue)) && stringValue.includes('T')) { // ISO string with time
+                valueToTransform = stringValue.split('T')[0]; // Extract YYYY-MM-DD part
+             } else {
+                valueToTransform = stringValue; // fallback
+             }
+
            } else if (stringValue === '' && !targetField.required) {
-             valueToTransform = null; // Send null for empty non-required fields
+             valueToTransform = null; 
            } else {
-             valueToTransform = stringValue; // Default to string
+             valueToTransform = stringValue; 
            }
            transformedRow[targetField.name] = valueToTransform;
         } else if (targetField.required) {
-          // This case should ideally be caught by mapping validation, but as a fallback:
           transformedRow[targetField.name] = null;
         }
       });
@@ -300,15 +324,14 @@ export function ExportDataDialog() {
         console.warn("No auth token found in local storage. Proceeding without Authorization header.");
         showToast({ title: 'Auth Token Missing', description: 'No API auth token found. Exporting without authentication.', variant: 'destructive' });
     }
-
-    // Ensure baseUrl is not empty before constructing the URL
-    const baseUrl = exportConfig.baseUrl || 'https://api.example.com/v1'; // Fallback, though API should provide it
+    
+    const baseUrl = exportConfig.baseUrl || 'https://api.example.com/v1'; 
     const fullApiUrl = (baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl) +
                        (selectedEntity.url.startsWith('/') ? selectedEntity.url : '/' + selectedEntity.url);
 
     try {
       console.log(`Simulating export to: ${fullApiUrl}`);
-      console.log('Request Headers:', requestHeaders);
+      console.log('Request Headers:', JSON.parse(JSON.stringify(requestHeaders))); // Clean display of headers
       console.log('Export Payload:', JSON.stringify(payload, null, 2));
 
       // const response = await fetch(fullApiUrl, {
@@ -322,7 +345,7 @@ export function ExportDataDialog() {
       // }
       // const responseData = await response.json();
 
-      await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate network delay
+      await new Promise(resolve => setTimeout(resolve, 1000)); 
 
       showToast({ title: 'Export "Simulated" Successfully', description: `Data for "${selectedEntity.name}" prepared. Check browser console.` });
     } catch (error: any) {
@@ -408,10 +431,14 @@ export function ExportDataDialog() {
                         {targetField.required ? <span className="text-destructive ml-1">*</span> : ''}
                         <span className="text-xs text-muted-foreground ml-1">({targetField.type || 'any'})</span>
                       </Label>
-                      <Select value={fieldMappings[targetField.name] || ''} onValueChange={(sourceCol) => handleMappingChange(targetField.name, sourceCol)} disabled={isLoading}>
+                      <Select 
+                        value={fieldMappings[targetField.name] || NOT_MAPPED_VALUE} 
+                        onValueChange={(sourceCol) => handleMappingChange(targetField.name, sourceCol)} 
+                        disabled={isLoading}
+                      >
                         <SelectTrigger id={`map-${targetField.name}`} className="text-sm h-9"><SelectValue placeholder="Select source column" /></SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="">-- Not Mapped --</SelectItem>
+                          <SelectItem value={NOT_MAPPED_VALUE}>-- Not Mapped --</SelectItem>
                           {appColumns.map(col => (<SelectItem key={col} value={col}>{col}</SelectItem>))}
                         </SelectContent>
                       </Select>
@@ -456,3 +483,6 @@ export function ExportDataDialog() {
     </Dialog>
   );
 }
+
+
+    
