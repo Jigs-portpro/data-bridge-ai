@@ -1,7 +1,6 @@
 
 export interface ExportEntityField {
-  name: string; // Column name in the source data
-  apiName?: string; // Optional: field name expected by the API if different
+  name: string; // Target API field name
   required?: boolean;
   type?: 'string' | 'number' | 'boolean' | 'email'; // Add more types as needed
   // Future validation options:
@@ -20,18 +19,18 @@ export interface ExportEntity {
 }
 
 // Example Entity Definitions:
-// You will need to update these with your actual field names, API names, and validation requirements.
+// You will need to update these with your actual target field names and validation requirements.
 export const exportEntities: ExportEntity[] = [
   {
     id: 'tmsCustomer',
     name: 'TMS Customer',
     url: 'https://new.dev.portpro.io/carrier/addTMSCustomer', // Ensure this is the correct endpoint
     fields: [
-      { name: 'CustomerName', apiName: 'customer_name', required: true, type: 'string' },
-      { name: 'EmailAddress', apiName: 'email', required: true, type: 'email' },
-      { name: 'PhoneNumber', apiName: 'phone', type: 'string' },
-      { name: 'Address', type: 'string' },
-      // Add other fields relevant to TMS Customer
+      { name: 'customer_name', required: true, type: 'string' }, // This is the target API field name
+      { name: 'email', required: true, type: 'email' },
+      { name: 'phone', type: 'string' },
+      { name: 'address_line1', type: 'string' }, // Assuming 'Address' from source might map to this
+      // Add other fields relevant to TMS Customer (target API fields)
     ],
   },
   {
@@ -39,22 +38,22 @@ export const exportEntities: ExportEntity[] = [
     name: 'Product List',
     url: 'https://new.dev.portpro.io/carrier/addProductList', // Example endpoint
     fields: [
-      { name: 'ProductName', apiName: 'product_name', required: true, type: 'string' },
-      { name: 'SKU', apiName: 'sku', required: true, type: 'string' },
-      { name: 'Price', type: 'number' },
-      { name: 'StockQuantity', apiName: 'stock_qty', type: 'number' },
-      // Add other fields relevant to Product List
+      { name: 'product_name', required: true, type: 'string' },
+      { name: 'sku', required: true, type: 'string' },
+      { name: 'price', type: 'number' },
+      { name: 'stock_qty', type: 'number' },
+      // Add other fields relevant to Product List (target API fields)
     ],
   },
-  // Add definitions for your other 19 entities here, for example:
+  // Add definitions for your other entities here, for example:
   // {
   //   id: 'trucks',
   //   name: 'Trucks',
   //   url: 'https://new.dev.portpro.io/carrier/addTrucks',
   //   fields: [
-  //     { name: 'TruckID', apiName: 'truck_identifier', required: true, type: 'string' },
-  //     { name: 'LicensePlate', apiName: 'license_plate', required: true, type: 'string' },
-  //     { name: 'Capacity', type: 'number' },
+  //     { name: 'truck_identifier', required: true, type: 'string' },
+  //     { name: 'license_plate', required: true, type: 'string' },
+  //     { name: 'capacity_tons', type: 'number' },
   //   ],
   // },
   // ... and so on for all entities
@@ -68,8 +67,8 @@ export const exportEntities: ExportEntity[] = [
     name: 'User Friendly Name for New Entity',
     url: 'https://your.api.endpoint/for/newEntity',
     fields: [
-      { name: 'ColumnNameInYourFile', apiName: 'fieldNameExpectedByAPI', required: true, type: 'string' },
-      { name: 'AnotherColumn', type: 'number' },
+      { name: 'targetApiFieldName', required: true, type: 'string' }, // This is the field name your API expects
+      { name: 'anotherTargetApiField', type: 'number' },
       // ... other fields
     ]
   }
