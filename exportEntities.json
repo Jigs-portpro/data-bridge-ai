@@ -3,7 +3,7 @@
   "entities": [
     {
       "id": "new-entity-1-jfmvv",
-      "name": "New Entity 1",
+      "name": "customer rate",
       "url": "/carrier/addTmsCustomer",
       "fields": [
         {

@@ -16,7 +16,8 @@ import {
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { useAppContext } from '@/hooks/useAppContext';
 import type { ExportEntity, ExportEntityField, ExportConfig } from '@/config/exportEntities';
-import { Send, AlertTriangle, Loader2, CheckCircle, ExternalLink } from 'lucide-react';
+import { objectsToCsv } from '@/lib/csvUtils'; // Ensure this is imported
+import { Send, AlertTriangle, Loader2, CheckCircle, DownloadCloud } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { isValid, parseISO } from 'date-fns';
@@ -49,7 +50,7 @@ const isValidDateString = (dateStr: string): boolean => {
   return isValid(parsedISO) && dateStr.includes('T');
 };
 
-const AUTH_TOKEN_STORAGE_KEY = 'datawiseAuthToken';
+const AUTH_TOKEN_STORAGE_KEY = 'datawiseAuthToken'; // This should be renamed to dataBridgeAuthToken or similar if you rename globally
 const NOT_MAPPED_VALUE = "__NOT_MAPPED_PLACEHOLDER__";
 
 export default function ExportDataPage() {
@@ -61,6 +62,7 @@ export default function ExportDataPage() {
     columns: appColumns,
     isAuthenticated,
     isAuthLoading,
+    fileName: originalFileName,
   } = useAppContext();
   const router = useRouter();
 
@@ -225,7 +227,6 @@ export default function ExportDataPage() {
     setValidationMessages([]);
 
     let allValidationErrors: string[] = [];
-    // Simulate async work for UI responsiveness if data is large
     await new Promise(resolve => setTimeout(resolve, 0)); 
 
     appData.forEach((row, index) => {
@@ -254,19 +255,12 @@ export default function ExportDataPage() {
     setAppContextIsLoading(false);
   }, [appData, exportConfig, fieldMappings, selectedEntityId, showToast, validateSingleRow, setAppContextIsLoading]);
 
-  const handleExportData = async () => {
-    if (!isDataValid || !hasValidated) {
-      showToast({ title: 'Validation Required', description: 'Please validate the data successfully before exporting.', variant: 'destructive' });
-      return;
-    }
-    if (!selectedEntityId || !exportConfig) return; // Should be caught by isDataValid
+  const transformDataForExport = useCallback(() => {
+    if (!selectedEntityId || !exportConfig || !appColumns.length) return [];
     const selectedEntity = exportConfig.entities.find(e => e.id === selectedEntityId);
-    if (!selectedEntity) return;
+    if (!selectedEntity) return [];
 
-    setIsExporting(true);
-    setAppContextIsLoading(true);
-
-    const payload = appData.map(row => {
+    return appData.map(row => {
       const transformedRow: Record<string, any> = {};
       selectedEntity.fields.forEach(targetField => {
         const sourceColumnName = fieldMappings[targetField.name];
@@ -287,33 +281,95 @@ export default function ExportDataPage() {
            } else if (stringValue === '' && !targetField.required) valueToTransform = null; 
            else valueToTransform = stringValue; 
            transformedRow[targetField.name] = valueToTransform;
-        } else if (targetField.required) transformedRow[targetField.name] = null;
+        } else if (targetField.required) {
+          transformedRow[targetField.name] = null; // Or some default, though validation should catch unmapped requireds
+        }
       });
-      return transformedRow;
+      // Only include fields defined in the target entity for the export
+      const finalRowForExport: Record<string, any> = {};
+      selectedEntity.fields.forEach(tf => {
+        finalRowForExport[tf.name] = transformedRow[tf.name];
+      });
+      return finalRowForExport;
     });
+  }, [appData, appColumns, exportConfig, fieldMappings, selectedEntityId]);
+
+
+  const handleExportToApi = async () => {
+    if (!isDataValid || !hasValidated) {
+      showToast({ title: 'Validation Required', description: 'Please validate the data successfully before exporting to API.', variant: 'destructive' });
+      return;
+    }
+    if (!selectedEntityId || !exportConfig) return;
+    const selectedEntity = exportConfig.entities.find(e => e.id === selectedEntityId);
+    if (!selectedEntity) return;
+
+    setIsExporting(true);
+    setAppContextIsLoading(true);
+
+    const payload = transformDataForExport();
 
     const authToken = typeof window !== 'undefined' ? localStorage.getItem(AUTH_TOKEN_STORAGE_KEY) : null;
     const requestHeaders: HeadersInit = { 'Content-Type': 'application/json', 'Accept': 'application/json, text/plain, */*' };
     if (authToken) requestHeaders['Authorization'] = `Bearer ${authToken}`;
-    else showToast({ title: 'Auth Token Missing', description: 'Exporting without authentication token.', variant: 'destructive' });
+    else showToast({ title: 'Auth Token Missing', description: 'Exporting to API without authentication token.', variant: 'destructive' });
     
     const baseUrl = exportConfig.baseUrl || ''; 
     const fullApiUrl = (baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl) + (selectedEntity.url.startsWith('/') ? selectedEntity.url : '/' + selectedEntity.url);
 
     try {
-      console.log(`Simulating export to: ${fullApiUrl}`);
+      console.log(`Simulating API export to: ${fullApiUrl}`);
       console.log('Request Headers:', JSON.parse(JSON.stringify(requestHeaders)));
-      console.log('Export Payload:', JSON.stringify(payload, null, 2));
+      console.log('Export Payload for API:', JSON.stringify(payload, null, 2));
       await new Promise(resolve => setTimeout(resolve, 1000)); 
-      showToast({ title: 'Export "Simulated" Successfully', description: `Data for "${selectedEntity.name}" prepared. Check browser console.` });
+      showToast({ title: 'API Export "Simulated"', description: `Data for "${selectedEntity.name}" prepared for API. Check browser console.` });
     } catch (error: any) {
-      setValidationMessages([`Export Error: ${error.message || 'An unknown error occurred.'}`]);
-      showToast({ title: 'Export Error', description: 'Error during export. See details on page.', variant: 'destructive' });
+      setValidationMessages([`API Export Error: ${error.message || 'An unknown error occurred.'}`]);
+      showToast({ title: 'API Export Error', description: 'Error during API export. See details on page.', variant: 'destructive' });
     } finally {
       setIsExporting(false);
       setAppContextIsLoading(false);
     }
   };
+
+  const handleExportToCsv = () => {
+    if (!isDataValid || !hasValidated) {
+      showToast({ title: 'Validation Required', description: 'Please validate the data successfully before exporting as CSV.', variant: 'destructive' });
+      return;
+    }
+    if (!selectedEntityId || !exportConfig) return;
+    const selectedEntity = exportConfig.entities.find(e => e.id === selectedEntityId);
+    if (!selectedEntity) return;
+
+    setIsExporting(true); // Reuse isExporting state
+    setAppContextIsLoading(true);
+
+    try {
+      const dataToExport = transformDataForExport();
+      const headersForCsv = selectedEntity.fields.map(f => f.name);
+      const csvString = objectsToCsv(headersForCsv, dataToExport);
+
+      const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      link.setAttribute('href', url);
+      const exportFileName = originalFileName ? `${originalFileName.split('.')[0]}_${selectedEntity.name.replace(/\s+/g, '_')}.csv` : `${selectedEntity.name.replace(/\s+/g, '_')}_export.csv`;
+      link.setAttribute('download', exportFileName);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      showToast({ title: 'CSV Exported', description: `Data for "${selectedEntity.name}" downloaded as ${exportFileName}.` });
+    } catch (error: any) {
+      console.error('Error exporting to CSV:', error);
+      showToast({ title: 'CSV Export Error', description: 'Failed to generate CSV file.', variant: 'destructive' });
+    } finally {
+      setIsExporting(false);
+      setAppContextIsLoading(false);
+    }
+  };
+
 
   const selectedEntityConfig = exportConfig?.entities.find(e => e.id === selectedEntityId);
   const noEntitiesConfigured = !exportConfig || exportConfig.entities.length === 0;
@@ -332,7 +388,6 @@ export default function ExportDataPage() {
   return (
     <AppLayout pageTitle="Export Data">
         <div className="flex flex-col h-full p-1 space-y-6">
-            {/* Configuration Section */}
             <Card>
                 <CardHeader>
                     <CardTitle>Export Configuration</CardTitle>
@@ -396,19 +451,18 @@ export default function ExportDataPage() {
                             <p className="text-xs text-muted-foreground mt-2"><span className="text-destructive">*</span> Target API field is required and must be mapped.</p>
                         </div>
                     )}
-                    {!selectedEntityConfig && exportConfig?.entities.length && (
+                    {!selectedEntityConfig && exportConfig?.entities.length > 0 && (
                         <p className="text-sm text-muted-foreground text-center py-4">Select an entity to configure field mappings.</p>
                     )}
                 </CardContent>
             </Card>
 
-            {/* Validation Section */}
             <Card>
                 <CardHeader>
                     <CardTitle>Data Validation</CardTitle>
                     <CardDescription>
                        Validate your mapped data against the target entity's rules before exporting.
-                       This step is required before the Export button is enabled.
+                       This step is required before any Export button is enabled.
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -451,28 +505,36 @@ export default function ExportDataPage() {
                 )}
             </Card>
 
-            {/* Export Action Section */}
             <Card>
                 <CardHeader>
-                    <CardTitle>Export</CardTitle>
+                    <CardTitle>Export Actions</CardTitle>
                     <CardDescription>
-                        Once data is successfully validated, you can proceed to export it to the target API.
+                        Once data is successfully validated, you can export it to the target API or download it as a CSV file.
                     </CardDescription>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="flex flex-col sm:flex-row gap-4">
                     <Button 
-                        onClick={handleExportData} 
+                        onClick={handleExportToApi} 
                         disabled={isLoading || !hasValidated || !isDataValid || !selectedEntityConfig}
-                        className="w-full md:w-auto"
+                        className="w-full sm:w-auto"
                     >
-                        {isExporting ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Send className="mr-2 h-4 w-4" />}
-                        {isExporting ? 'Exporting...' : 'Export Data'}
+                        {isExporting && appContextIsLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Send className="mr-2 h-4 w-4" />}
+                        Export to API
+                    </Button>
+                    <Button 
+                        onClick={handleExportToCsv} 
+                        variant="outline"
+                        disabled={isLoading || !hasValidated || !isDataValid || !selectedEntityConfig}
+                        className="w-full sm:w-auto"
+                    >
+                        {isExporting && appContextIsLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <DownloadCloud className="mr-2 h-4 w-4" />}
+                        Download as CSV
                     </Button>
                 </CardContent>
                  <CardFooter>
                     <p className="text-xs text-muted-foreground">
-                        The "Export Data" button will be enabled after successful validation with no errors.
-                        Export is currently simulated; check browser console for payload.
+                        Export buttons are enabled after successful validation.
+                        API export is currently simulated; check browser console for payload.
                     </p>
                 </CardFooter>
             </Card>
@@ -480,4 +542,3 @@ export default function ExportDataPage() {
     </AppLayout>
   );
 }
-

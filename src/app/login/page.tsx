@@ -61,7 +61,7 @@ export default function LoginPage() {
           <div className="mb-4 flex justify-center">
             <LogoIcon className="h-16 w-16 text-primary" />
           </div>
-          <CardTitle className="text-3xl font-headline">DataWise AI</CardTitle>
+          <CardTitle className="text-3xl font-headline">Data Bridge</CardTitle>
           <CardDescription>Please sign in to access your dashboard.</CardDescription>
         </CardHeader>
         <CardContent>

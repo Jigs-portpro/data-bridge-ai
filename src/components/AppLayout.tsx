@@ -10,7 +10,6 @@ import { DataEnrichmentDialog } from '@/components/dialogs/DataEnrichmentDialog'
 import { ColumnReorderDialog } from '@/components/dialogs/ColumnReorderDialog';
 import { AnomalyReportDialog } from '@/components/dialogs/AnomalyReportDialog';
 import { DuplicateDetectionDialog } from '@/components/dialogs/DuplicateDetectionDialog';
-// Removed: import { ExportDataDialog } from '@/components/dialogs/ExportDataDialog';
 import { SidebarProvider, SidebarInset, SidebarTrigger } from '@/components/ui/sidebar';
 import { Separator } from '@/components/ui/separator';
 import { Button } from '@/components/ui/button';
@@ -46,17 +45,7 @@ export function AppLayout({ children, pageTitle }: { children?: React.ReactNode;
                     {/* Right: Global Actions */}
                     <div className="flex items-center gap-2 self-start sm:self-auto"> 
                       <FileUploadButton />
-                      <Button
-                        variant="outline"
-                        onClick={() => router.push('/export-data')} // Navigate to page
-                        disabled={!isDataLoaded}
-                        asChild
-                      >
-                        <Link href="/export-data">
-                           <Send className="mr-2 h-4 w-4" />
-                           Export Data
-                        </Link>
-                      </Button>
+                      {/* Export Data button removed from global header */}
                     </div>
                   </div>
 
@@ -89,7 +78,6 @@ export function AppLayout({ children, pageTitle }: { children?: React.ReactNode;
       {activeDialog === 'reorder' && <ColumnReorderDialog />}
       {activeDialog === 'anomaly' && <AnomalyReportDialog />}
       {activeDialog === 'duplicate' && <DuplicateDetectionDialog />}
-      {/* {activeDialog === 'export' && <ExportDataDialog />} Removed */}
     </SidebarProvider>
   );
 }

@@ -14,7 +14,8 @@ import {
   LogOut,
   Settings,
   KeyRound,
-  Send, // Added Send icon for export
+  Send,
+  DownloadCloud, // Added for CSV export icon
 } from 'lucide-react';
 import {
   Sidebar,
@@ -50,7 +51,7 @@ export function DataToolsSidebar() {
           <Link href="/" passHref>
             <div className="flex items-center gap-2 group-data-[collapsible=icon]:justify-center cursor-pointer">
               <LogoIcon className="w-8 h-8 text-primary group-data-[collapsible=icon]:w-6 group-data-[collapsible=icon]:h-6 transition-all" />
-              <h1 className="text-2xl font-headline font-semibold text-primary group-data-[collapsible=icon]:hidden">DataWise AI</h1>
+              <h1 className="text-2xl font-headline font-semibold text-primary group-data-[collapsible=icon]:hidden">Data Bridge</h1>
             </div>
           </Link>
         </SidebarHeader>
@@ -77,8 +78,31 @@ export function DataToolsSidebar() {
                 </SidebarGroupContent>
             </SidebarGroup>
             <SidebarSeparator className="my-2" />
+             <SidebarGroup>
+                <SidebarGroupLabel className="group-data-[collapsible=icon]:hidden">Data Export</SidebarGroupLabel>
+                 <SidebarGroupContent>
+                    <SidebarMenu>
+                         <SidebarMenuItem>
+                            <Link href="/export-data" passHref legacyBehavior>
+                                <SidebarMenuButton
+                                    disabled={!isDataLoaded || !isAuthenticated}
+                                    tooltip={{children: "Prepare & Export Data", side:"right", align:"center"}}
+                                    className="justify-start"
+                                    asChild
+                                >
+                                   <a>
+                                    <Send className="h-5 w-5" />
+                                    <span className="group-data-[collapsible=icon]:hidden">Export Data</span>
+                                   </a>
+                                </SidebarMenuButton>
+                            </Link>
+                        </SidebarMenuItem>
+                    </SidebarMenu>
+                 </SidebarGroupContent>
+            </SidebarGroup>
+            <SidebarSeparator className="my-2" />
             <SidebarGroup>
-                <SidebarGroupLabel className="group-data-[collapsible=icon]:hidden">Application</SidebarGroupLabel>
+                <SidebarGroupLabel className="group-data-[collapsible=icon]:hidden">Configuration</SidebarGroupLabel>
                 <SidebarGroupContent>
                     <SidebarMenu>
                         <SidebarMenuItem>
@@ -107,21 +131,6 @@ export function DataToolsSidebar() {
                                    <a>
                                     <KeyRound className="h-5 w-5" />
                                     <span className="group-data-[collapsible=icon]:hidden">API Auth</span>
-                                   </a>
-                                </SidebarMenuButton>
-                            </Link>
-                        </SidebarMenuItem>
-                         <SidebarMenuItem>
-                            <Link href="/export-data" passHref legacyBehavior>
-                                <SidebarMenuButton
-                                    disabled={!isDataLoaded || !isAuthenticated}
-                                    tooltip={{children: "Export Data", side:"right", align:"center"}}
-                                    className="justify-start"
-                                    asChild
-                                >
-                                   <a>
-                                    <Send className="h-5 w-5" />
-                                    <span className="group-data-[collapsible=icon]:hidden">Export Data</span>
                                    </a>
                                 </SidebarMenuButton>
                             </Link>

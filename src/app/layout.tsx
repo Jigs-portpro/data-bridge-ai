@@ -1,10 +1,11 @@
+
 import type { Metadata } from 'next';
 import { AppProvider } from '@/contexts/AppContext';
 import { Toaster } from '@/components/ui/toaster';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'DataWise AI',
+  title: 'Data Bridge',
   description: 'Intelligent Data Processing and Enrichment Platform',
 };
 
