@@ -43,7 +43,7 @@ export function DataTable() {
           <TableHeader>
             <TableRow>
               {columns.map((col) => (
-                <TableHead key={col} className="font-semibold">{col}</TableHead>
+                <TableHead key={col} className="font-semibold whitespace-nowrap">{col}</TableHead>
               ))}
             </TableRow>
           </TableHeader>
