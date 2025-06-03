@@ -25,23 +25,33 @@ interface LookupSourceDisplay {
 export default function LookupsPage() {
   const appContext = useAppContext();
   const { 
-    chassisOwnersData, 
-    fetchAndStoreChassisOwners, 
-    clearChassisOwnersData, 
     isLoading: appIsLoading, // Global loading state
     isAuthenticated,
     isAuthLoading,
-    chassisOwnersLastFetched
+    // Chassis Owners
+    chassisOwnersData, 
+    fetchAndStoreChassisOwners, 
+    clearChassisOwnersData, 
+    chassisOwnersLastFetched,
+    // Chassis Sizes
+    chassisSizesData,
+    fetchAndStoreChassisSizes,
+    clearChassisSizesData,
+    chassisSizesLastFetched,
+    // Chassis Types
+    chassisTypesData,
+    fetchAndStoreChassisTypes,
+    clearChassisTypesData,
+    chassisTypesLastFetched,
   } = appContext;
 
   const [dataForViewing, setDataForViewing] = useState<{ name: string; data: any[]; columns: string[] } | null>(null);
   const [isFetchingSpecific, setIsFetchingSpecific] = useState<Record<string, boolean>>({});
 
 
-  // Define lookup sources - this would be expanded for more lookups
   const lookupSources: LookupSourceDisplay[] = [
     {
-      id: 'chassisOwners', // The ID to use in exportEntities.json
+      id: 'chassisOwners',
       name: 'Chassis Owners',
       fetchAction: async () => {
         setIsFetchingSpecific(prev => ({ ...prev, chassisOwners: true }));
@@ -51,18 +61,34 @@ export default function LookupsPage() {
       clearAction: clearChassisOwnersData,
       getData: () => chassisOwnersData,
       getLastFetched: () => chassisOwnersLastFetched,
-      isFetchingData: isFetchingSpecific['chassisOwners'] || (appIsLoading && chassisOwnersData === null),
+      isFetchingData: isFetchingSpecific['chassisOwners'] || (appIsLoading && !chassisOwnersData && !chassisOwnersLastFetched),
     },
-    // Example for another lookup in the future:
-    // {
-    //   id: 'productCategories',
-    //   name: 'Product Categories',
-    //   fetchAction: async () => { /* fetch product categories */ },
-    //   clearAction: () => { /* clear product categories */ },
-    //   getData: () => appContext.productCategoriesData,
-    //   getLastFetched: () => appContext.productCategoriesLastFetched,
-    //   isFetchingData: isFetchingSpecific['productCategories'],
-    // },
+    {
+      id: 'chassisSizes',
+      name: 'Chassis Sizes',
+      fetchAction: async () => {
+        setIsFetchingSpecific(prev => ({ ...prev, chassisSizes: true }));
+        await fetchAndStoreChassisSizes();
+        setIsFetchingSpecific(prev => ({ ...prev, chassisSizes: false }));
+      },
+      clearAction: clearChassisSizesData,
+      getData: () => chassisSizesData,
+      getLastFetched: () => chassisSizesLastFetched,
+      isFetchingData: isFetchingSpecific['chassisSizes'] || (appIsLoading && !chassisSizesData && !chassisSizesLastFetched),
+    },
+    {
+      id: 'chassisTypes',
+      name: 'Chassis Types',
+      fetchAction: async () => {
+        setIsFetchingSpecific(prev => ({ ...prev, chassisTypes: true }));
+        await fetchAndStoreChassisTypes();
+        setIsFetchingSpecific(prev => ({ ...prev, chassisTypes: false }));
+      },
+      clearAction: clearChassisTypesData,
+      getData: () => chassisTypesData,
+      getLastFetched: () => chassisTypesLastFetched,
+      isFetchingData: isFetchingSpecific['chassisTypes'] || (appIsLoading && !chassisTypesData && !chassisTypesLastFetched),
+    },
   ];
 
   const handleViewData = (source: LookupSourceDisplay) => {
@@ -77,14 +103,19 @@ export default function LookupsPage() {
   };
   
   useEffect(() => {
-    // If viewed data source is cleared, also clear the viewer
     if (dataForViewing) {
       const currentSource = lookupSources.find(ls => ls.name === dataForViewing.name);
-      if (currentSource && (!currentSource.getData() || currentSource.getData()?.length === 0)) {
-        setDataForViewing(null);
+      if (currentSource) {
+        const data = currentSource.getData();
+        if (!data || data.length === 0) {
+          setDataForViewing(null);
+        } else if (data !== dataForViewing.data) { // If data was refreshed
+           const columns = data.length > 0 ? Object.keys(data[0]) : [];
+           setDataForViewing({ name: currentSource.name, data, columns });
+        }
       }
     }
-  }, [chassisOwnersData, dataForViewing]); // Add other lookup data states here if they affect viewing
+  }, [chassisOwnersData, chassisSizesData, chassisTypesData, dataForViewing, lookupSources]);
 
   if (isAuthLoading || !isAuthenticated) {
     return (
@@ -166,7 +197,7 @@ export default function LookupsPage() {
                           <Button variant="link" size="sm" className="h-auto p-1 text-xs" onClick={() => handleViewData(source)} disabled={source.isFetchingData || !isDataPresent}>
                             <Eye className="mr-1 h-3 w-3"/>View
                           </Button>
-                          <Button variant="link" size="sm" className="h-auto p-1 text-xs text-destructive" onClick={() => { source.clearAction(); setDataForViewing(null);}} disabled={source.isFetchingData || !isDataPresent}>
+                          <Button variant="link" size="sm" className="h-auto p-1 text-xs text-destructive" onClick={() => { source.clearAction(); if(dataForViewing?.name === source.name) setDataForViewing(null);}} disabled={source.isFetchingData || !isDataPresent}>
                             <Trash2 className="mr-1 h-3 w-3"/>Clear
                           </Button>
                         </TableCell>
@@ -234,4 +265,3 @@ export default function LookupsPage() {
     </AppLayout>
   );
 }
-

@@ -29,7 +29,7 @@ type AppContextType = {
   closeDialog: () => void;
   isLoading: boolean;
   setIsLoading: (loading: boolean) => void;
-  showToast: (options: { title: string; description?: string; variant?: ToastProps['variant'] }) => void;
+  showToast: (options: { title: string; description?: string; variant?: ToastProps['variant'], duration?: number }) => void;
   chatHistory: { role: 'user' | 'assistant'; content: string }[];
   addChatMessage: (message: { role: 'user' | 'assistant'; content: string }) => void;
   clearChatHistory: () => void;
@@ -48,8 +48,17 @@ type AppContextType = {
   setSelectedAiModelName: (modelName: string | null) => void;
   getEnvKeys: () => Record<string, boolean>;
   chassisOwnersData: any[] | null;
+  chassisOwnersLastFetched: Date | null;
   fetchAndStoreChassisOwners: () => Promise<void>;
-  clearChassisOwnersData: () => void; // New function to clear data
+  clearChassisOwnersData: () => void;
+  chassisSizesData: any[] | null;
+  chassisSizesLastFetched: Date | null;
+  fetchAndStoreChassisSizes: () => Promise<void>;
+  clearChassisSizesData: () => void;
+  chassisTypesData: any[] | null;
+  chassisTypesLastFetched: Date | null;
+  fetchAndStoreChassisTypes: () => Promise<void>;
+  clearChassisTypesData: () => void;
 };
 
 export const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -70,7 +79,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [selectedAiProvider, setSelectedAiProviderState] = useState<string | null>(null);
   const [selectedAiModelName, setSelectedAiModelNameState] = useState<string | null>(null);
   const [envKeys, setEnvKeys] = useState<Record<string, boolean>>({});
+  
   const [chassisOwnersData, setChassisOwnersDataState] = useState<any[] | null>(null);
+  const [chassisOwnersLastFetched, setChassisOwnersLastFetched] = useState<Date | null>(null);
+  const [chassisSizesData, setChassisSizesDataState] = useState<any[] | null>(null);
+  const [chassisSizesLastFetched, setChassisSizesLastFetched] = useState<Date | null>(null);
+  const [chassisTypesData, setChassisTypesDataState] = useState<any[] | null>(null);
+  const [chassisTypesLastFetched, setChassisTypesLastFetched] = useState<Date | null>(null);
+
 
   const { toast } = useToast();
   const router = useRouter();
@@ -211,7 +227,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, []);
   
   const clearApiToken = useCallback(() => {
-    if (typeof window !== 'undefined') localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
+    }
   }, []);
   
   const login = useCallback((username: string, pass: string): boolean => {
@@ -236,7 +254,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setColumnsState([]);
     setFileNameState(null);
     router.push('/login');
-  }, [router, showToast, clearApiToken]);
+  }, [router, showToast]); // Removed clearApiToken from here as it's stable
 
   const storeApiToken = useCallback((token: string, companyName?: string | null) => {
     if (typeof window !== 'undefined') localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, token);
@@ -278,57 +296,88 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   
   const getEnvKeys = useCallback(() => envKeys, [envKeys]);
 
-  const fetchAndStoreChassisOwners = useCallback(async () => {
+  // Generic Fetch Logic
+  const genericFetchLookupData = async (
+    endpoint: string,
+    dataSetter: React.Dispatch<React.SetStateAction<any[] | null>>,
+    lastFetchedSetter: React.Dispatch<React.SetStateAction<Date | null>>,
+    lookupName: string
+  ) => {
     const token = getApiToken();
-    console.log("Using token for Chassis Owners fetch:", token ? "Token present" : "Token MISSING");
     if (!token) {
-      showToast({ title: 'Authentication Required', description: 'API token is missing. Please set it on the API Auth page.', variant: 'destructive', duration: 7000 });
+      showToast({ title: 'Authentication Required', description: `API token is missing for ${lookupName}. Please set it on the API Auth page.`, variant: 'destructive', duration: 7000 });
       return;
     }
     setIsLoading(true);
     try {
-      console.log("Fetching chassis owners from: https://api.axle.network/carrier/getTMSChassisOwner");
-      const response = await fetch('https://api.axle.network/carrier/getTMSChassisOwner', {
+      const fullUrl = `https://api.axle.network${endpoint}`;
+      console.log(`Fetching ${lookupName} from: ${fullUrl}`);
+      const response = await fetch(fullUrl, {
         method: 'GET',
         headers: {
-          'Authorization': `Bearer ${token}`, // Ensure token is not double-quoted
+          'Authorization': `Bearer ${token}`,
           'Accept': 'application/json, text/plain, */*',
-          // The other headers from curl (User-Agent, sec-ch-ua etc.) are browser-managed or less critical for server-to-server.
         },
       });
-
-      console.log("Chassis Owners API Response Status:", response.status, response.statusText);
+      console.log(`${lookupName} API Response Status:`, response.status, response.statusText);
 
       if (!response.ok) {
         let errorData = { message: `API Error: ${response.status} ${response.statusText}` };
         try {
           errorData = await response.json();
-          console.error("Chassis Owners API Error Response Body:", errorData);
+          console.error(`${lookupName} API Error Response Body:`, errorData);
         } catch (e) {
-          console.error("Chassis Owners API Error: Could not parse error response JSON.");
+          console.error(`${lookupName} API Error: Could not parse error response JSON.`);
         }
-        throw new Error(errorData.message || `Failed to fetch chassis owners: ${response.status}`);
+        throw new Error(errorData.message || `Failed to fetch ${lookupName}: ${response.status}`);
       }
 
       const resultData = await response.json();
-      console.log("Chassis Owners API Success Response Body:", resultData);
+      console.log(`${lookupName} API Success Response Body:`, resultData);
       
-      const owners = Array.isArray(resultData) ? resultData : (resultData.data && Array.isArray(resultData.data)) ? resultData.data : [];
+      const items = Array.isArray(resultData) ? resultData : (resultData.data && Array.isArray(resultData.data)) ? resultData.data : [];
       
-      setChassisOwnersDataState(owners);
-      showToast({ title: 'Success', description: `${owners.length} chassis owners fetched and cached.` });
+      dataSetter(items);
+      lastFetchedSetter(new Date());
+      showToast({ title: 'Success', description: `${items.length} ${lookupName.toLowerCase()} fetched and cached.` });
     } catch (error: any) {
-      console.error('Error fetching chassis owners:', error);
-      showToast({ title: 'Fetch Error', description: error.message || 'Could not fetch chassis owners.', variant: 'destructive', duration: 7000 });
-      setChassisOwnersDataState(null);
+      console.error(`Error fetching ${lookupName}:`, error);
+      showToast({ title: 'Fetch Error', description: error.message || `Could not fetch ${lookupName}.`, variant: 'destructive', duration: 7000 });
+      dataSetter(null);
+      lastFetchedSetter(null);
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const fetchAndStoreChassisOwners = useCallback(async () => {
+    await genericFetchLookupData('/carrier/getTMSChassisOwner', setChassisOwnersDataState, setChassisOwnersLastFetched, 'Chassis Owners');
   }, [getApiToken, setIsLoading, showToast]);
 
   const clearChassisOwnersData = useCallback(() => {
     setChassisOwnersDataState(null);
-    showToast({ title: 'Cache Cleared', description: 'Chassis owner data has been cleared from local cache.' });
+    setChassisOwnersLastFetched(null);
+    showToast({ title: 'Cache Cleared', description: 'Chassis owner data has been cleared.' });
+  }, [showToast]);
+
+  const fetchAndStoreChassisSizes = useCallback(async () => {
+    await genericFetchLookupData('/carrier/getChassisSize', setChassisSizesDataState, setChassisSizesLastFetched, 'Chassis Sizes');
+  }, [getApiToken, setIsLoading, showToast]);
+
+  const clearChassisSizesData = useCallback(() => {
+    setChassisSizesDataState(null);
+    setChassisSizesLastFetched(null);
+    showToast({ title: 'Cache Cleared', description: 'Chassis size data has been cleared.' });
+  }, [showToast]);
+
+  const fetchAndStoreChassisTypes = useCallback(async () => {
+    await genericFetchLookupData('/carrier/getChassisType', setChassisTypesDataState, setChassisTypesLastFetched, 'Chassis Types');
+  }, [getApiToken, setIsLoading, showToast]);
+
+  const clearChassisTypesData = useCallback(() => {
+    setChassisTypesDataState(null);
+    setChassisTypesLastFetched(null);
+    showToast({ title: 'Cache Cleared', description: 'Chassis type data has been cleared.' });
   }, [showToast]);
 
 
@@ -365,8 +414,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setSelectedAiModelName,
         getEnvKeys,
         chassisOwnersData,
+        chassisOwnersLastFetched,
         fetchAndStoreChassisOwners,
         clearChassisOwnersData,
+        chassisSizesData,
+        chassisSizesLastFetched,
+        fetchAndStoreChassisSizes,
+        clearChassisSizesData,
+        chassisTypesData,
+        chassisTypesLastFetched,
+        fetchAndStoreChassisTypes,
+        clearChassisTypesData,
       }}
     >
       {children}
