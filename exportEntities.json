@@ -60,10 +60,21 @@
       ]
     },
     {
-      "id": "new-entity-3-dgtox",
-      "name": "New Entity 3",
+      "id": "Chassis",
+      "name": "Chassis",
       "url": "/new-endpoint",
-      "fields": []
+      "fields": [
+        {
+          "name": "Chasis Owner",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "Chasis Size",
+          "type": "string",
+          "required": true
+        }
+      ]
     },
     {
       "id": "new-entity-4-43tf2",

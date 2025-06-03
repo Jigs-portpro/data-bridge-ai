@@ -17,14 +17,14 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { useAppContext } from '@/hooks/useAppContext';
 import type { ExportEntity, ExportEntityField, ExportConfig } from '@/config/exportEntities';
 import { objectsToCsv } from '@/lib/csvUtils';
-import { Send, AlertTriangle, Loader2, CheckCircle, DownloadCloud, Sparkles } from 'lucide-react'; // Added Sparkles
+import { Send, AlertTriangle, Loader2, CheckCircle, DownloadCloud, Sparkles, DatabaseZap } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { isValid, parseISO } from 'date-fns';
 import Link from 'next/link';
 import { Separator } from '@/components/ui/separator';
-import { autoColumnMapping, type MappingSuggestion } from '@/ai/flows/auto-column-mapping'; // New AI flow
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'; // For confidence
+import { autoColumnMapping, type MappingSuggestion } from '@/ai/flows/auto-column-mapping';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 
 const isValidEmail = (email: string): boolean => {
@@ -55,6 +55,8 @@ const isValidDateString = (dateStr: string): boolean => {
 
 const AUTH_TOKEN_STORAGE_KEY = 'datawiseAuthToken';
 const NOT_MAPPED_VALUE = "__NOT_MAPPED_PLACEHOLDER__";
+const MAX_VALIDATION_MESSAGES_DISPLAYED = 100;
+
 
 export default function ExportDataPage() {
   const {
@@ -66,6 +68,9 @@ export default function ExportDataPage() {
     isAuthenticated,
     isAuthLoading,
     fileName: originalFileName,
+    chassisOwnersData, // Access chassisOwnersData from context
+    selectedAiProvider,
+    selectedAiModelName,
   } = useAppContext();
   const router = useRouter();
 
@@ -109,7 +114,7 @@ export default function ExportDataPage() {
     } catch (error) {
       console.error("Error fetching entities config:", error);
       showToast({ title: "Config Error", description: "Could not load export entities configuration.", variant: "destructive" });
-      setExportConfig({ baseUrl: '', entities: [] }); // Default empty config
+      setExportConfig({ baseUrl: '', entities: [] }); 
       setSelectedEntityId('');
     } finally {
       setIsFetchingConfig(false);
@@ -139,7 +144,7 @@ export default function ExportDataPage() {
       setValidationMessages([]);
       setHasValidated(false);
       setIsDataValid(false);
-      setFieldMappingConfidences({}); // Clear confidences when entity changes
+      setFieldMappingConfidences({});
     } else if (!selectedEntityId) {
       setFieldMappings({});
       setValidationMessages([]);
@@ -154,21 +159,21 @@ export default function ExportDataPage() {
       ...prev, 
       [targetFieldName]: sourceColumnName === NOT_MAPPED_VALUE ? '' : sourceColumnName 
     }));
-    setFieldMappingConfidences(prev => ({ ...prev, [targetFieldName]: null })); // Clear AI confidence for this field
+    setFieldMappingConfidences(prev => ({ ...prev, [targetFieldName]: null }));
     setHasValidated(false);
     setIsDataValid(false);
     setValidationMessages([]);
   };
 
-  const validateSingleRow = useCallback((row: Record<string, any>, rowIndex: number, entityFields: ExportEntityField[]): string[] => {
+  const validateSingleRow = useCallback((row: Record<string, any>, rowIndex: number, entityConfig: ExportEntity): string[] => {
     const errors: string[] = [];
-    entityFields.forEach(targetField => {
+    entityConfig.fields.forEach(targetField => {
       const sourceColumnName = fieldMappings[targetField.name];
       if (targetField.required && !sourceColumnName) {
         errors.push(`Row ${rowIndex + 1}, Target "${targetField.name}": required by API but not mapped.`);
         return;
       }
-      if (!sourceColumnName) return; // Not mapped, not required, so skip further validation for this field
+      if (!sourceColumnName) return; 
 
       const value = row[sourceColumnName];
       const stringValue = (value === null || value === undefined) ? '' : String(value).trim();
@@ -177,8 +182,7 @@ export default function ExportDataPage() {
         errors.push(`Row ${rowIndex + 1}, Field "${targetField.name}" (from "${sourceColumnName}"): required by API but source data is empty.`);
       }
 
-      // Field-specific validations if value is not empty or if it's required (empty check already done)
-      if (stringValue !== '') { // Only perform type/format checks if there's a value
+      if (stringValue !== '') { 
         switch (targetField.type) {
           case 'string':
           case 'email':
@@ -194,7 +198,7 @@ export default function ExportDataPage() {
                 if (!regex.test(stringValue)) {
                   errors.push(`Row ${rowIndex + 1}, "${targetField.name}" (from "${sourceColumnName}"): does not match pattern "${targetField.pattern}". Value: "${stringValue.substring(0,50)}"`);
                 }
-              } catch (e) { /* ignore invalid regex in config for now */ }
+              } catch (e) { /* ignore invalid regex */ }
             }
             if (targetField.type === 'email' && !isValidEmail(stringValue)) {
               errors.push(`Row ${rowIndex + 1}, "${targetField.name}" (from "${sourceColumnName}"): not a valid email. Value: "${stringValue}"`);
@@ -210,7 +214,6 @@ export default function ExportDataPage() {
             }
             break;
           case 'boolean':
-            // Allow empty strings for non-required booleans, they will be transformed to null
             if (stringValue !== '' && !['true', 'false', '1', '0'].includes(stringValue.toLowerCase())) {
                  errors.push(`Row ${rowIndex + 1}, "${targetField.name}" (from "${sourceColumnName}"): should be boolean (true/false, 1/0). Found "${stringValue}".`);
             }
@@ -221,8 +224,41 @@ export default function ExportDataPage() {
         }
       }
     });
+
+    // Chassis specific validation if errors are still low
+    if (errors.length < MAX_VALIDATION_MESSAGES_DISPLAYED && entityConfig.id === 'Chassis') {
+      if (!chassisOwnersData || chassisOwnersData.length === 0) {
+        errors.push('Chassis Validation Skipped: Lookup data for "Chassis Owners" is not loaded. Please fetch it on the Lookups page.');
+        return errors; // Return early as further chassis validation is not possible
+      }
+
+      const chassisFieldsToValidate = [
+        { targetName: "Chasis Owner", lookupColumn: "Chasis Owner" }, // Assumes lookup data has "Chasis Owner"
+        { targetName: "Chasis Size", lookupColumn: "Chasis Size" },   // Assumes lookup data has "Chasis Size"
+      ];
+
+      for (const { targetName, lookupColumn } of chassisFieldsToValidate) {
+        const sourceColumnName = fieldMappings[targetName];
+        if (sourceColumnName && row[sourceColumnName] !== undefined && row[sourceColumnName] !== null && String(row[sourceColumnName]).trim() !== '') {
+          const valueToValidate = String(row[sourceColumnName]).trim();
+          // Ensure the lookupColumn exists in the chassisOwnersData items
+          const firstLookupItem = chassisOwnersData[0];
+          if (firstLookupItem && !(lookupColumn in firstLookupItem)) {
+            if (!errors.some(e => e.startsWith(`Lookup column "${lookupColumn}" not found`))) { // Add only once
+                 errors.push(`Lookup column "${lookupColumn}" not found in Chassis Owners data. Cannot validate.`);
+            }
+            continue; // Skip validation for this field if lookup column doesn't exist
+          }
+
+          const foundInLookup = chassisOwnersData.some(lookupRow => String(lookupRow[lookupColumn]).trim() === valueToValidate);
+          if (!foundInLookup) {
+            errors.push(`Row ${rowIndex + 1}, Target "${targetName}" (from "${sourceColumnName}"): Value "${valueToValidate}" not found in Chassis Owners lookup data.`);
+          }
+        }
+      }
+    }
     return errors;
-  }, [fieldMappings]);
+  }, [fieldMappings, chassisOwnersData]);
 
   const handleValidateData = useCallback(async () => {
     if (!selectedEntityId || !exportConfig) {
@@ -239,16 +275,18 @@ export default function ExportDataPage() {
     setAppContextIsLoading(true);
     setValidationMessages([]);
 
-    // Give UI a chance to update (show loader)
     await new Promise(resolve => setTimeout(resolve, 0)); 
 
     let allValidationErrors: string[] = [];
-    appData.forEach((row, index) => {
-      if (allValidationErrors.length < 200) { // Limit displayed errors
-        const rowErrors = validateSingleRow(row, index, selectedEntity.fields);
-        allValidationErrors = [...allValidationErrors, ...rowErrors];
+    for (let i = 0; i < appData.length; i++) {
+      const row = appData[i];
+      const rowErrors = validateSingleRow(row, i, selectedEntity);
+      allValidationErrors = [...allValidationErrors, ...rowErrors];
+      if (allValidationErrors.length >= MAX_VALIDATION_MESSAGES_DISPLAYED) {
+        allValidationErrors.push(`Validation stopped after reaching ${MAX_VALIDATION_MESSAGES_DISPLAYED} errors. There may be more.`);
+        break; 
       }
-    });
+    }
     
     setHasValidated(true);
     setValidationMessages(allValidationErrors);
@@ -260,14 +298,14 @@ export default function ExportDataPage() {
       setIsDataValid(false);
       showToast({
         title: 'Validation Failed',
-        description: `${allValidationErrors.length} error(s) found. Please review the errors.`,
+        description: `${allValidationErrors.length > MAX_VALIDATION_MESSAGES_DISPLAYED ? 'More than ' : ''}${Math.min(allValidationErrors.length, MAX_VALIDATION_MESSAGES_DISPLAYED)} error(s) found. Please review.`,
         variant: 'destructive',
         duration: 7000,
       });
     }
     setIsValidating(false);
     setAppContextIsLoading(false);
-  }, [appData, exportConfig, fieldMappings, selectedEntityId, showToast, validateSingleRow, setAppContextIsLoading]);
+  }, [appData, exportConfig, selectedEntityId, showToast, validateSingleRow, setAppContextIsLoading, chassisOwnersData]);
 
   const transformDataForExport = useCallback(() => {
     if (!selectedEntityId || !exportConfig || !appColumns.length) return [];
@@ -283,7 +321,7 @@ export default function ExportDataPage() {
            const stringValue = (valueToTransform === null || valueToTransform === undefined) ? '' : String(valueToTransform).trim();
            
            if (stringValue === '' && !targetField.required) {
-             transformedRow[targetField.name] = null; // Set to null if empty and not required
+             transformedRow[targetField.name] = null; 
            } else {
              switch (targetField.type) {
                 case 'boolean':
@@ -291,39 +329,36 @@ export default function ExportDataPage() {
                     break;
                 case 'number':
                     const num = parseFloat(stringValue);
-                    transformedRow[targetField.name] = isNaN(num) ? (targetField.required ? 0 : null) : num; // Default to 0 if required & NaN, else null
+                    transformedRow[targetField.name] = isNaN(num) ? (targetField.required ? 0 : null) : num;
                     break;
                 case 'date':
                     if (isValidDateString(stringValue)) {
-                        // Standardize to YYYY-MM-DD
                         const commonFormatMatch = stringValue.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
                         if (commonFormatMatch) {
                             const d = new Date(parseInt(commonFormatMatch[3]), parseInt(commonFormatMatch[1]) - 1, parseInt(commonFormatMatch[2]));
                             if(isValid(d)) transformedRow[targetField.name] = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-                            else transformedRow[targetField.name] = stringValue; // Keep original if parsing to standard fails
+                            else transformedRow[targetField.name] = stringValue; 
                         } else if (stringValue.match(/^\d{4}-\d{2}-\d{2}$/)) {
                            transformedRow[targetField.name] = stringValue;
                         } else if (isValid(parseISO(stringValue)) && stringValue.includes('T')) {
                            transformedRow[targetField.name] = stringValue.split('T')[0];
                         } else {
-                           transformedRow[targetField.name] = stringValue; // Keep if not a recognized transformable format
+                           transformedRow[targetField.name] = stringValue; 
                         }
                     } else {
-                        transformedRow[targetField.name] = targetField.required ? stringValue : null; // Keep invalid date if required, else null
+                        transformedRow[targetField.name] = targetField.required ? stringValue : null; 
                     }
                     break;
-                default: // string, email
+                default: 
                     transformedRow[targetField.name] = stringValue;
              }
            }
         } else if (targetField.required) {
-          // This should ideally be caught by validation, but as a fallback:
-          transformedRow[targetField.name] = null; // Or appropriate default for type if required and unmapped
+          transformedRow[targetField.name] = null; 
         } else {
-          transformedRow[targetField.name] = null; // Unmapped and not required
+          transformedRow[targetField.name] = null; 
         }
       });
-      // Ensure only fields defined in the target entity are included
       const finalRowForExport: Record<string, any> = {};
        selectedEntity.fields.forEach(tf => {
         finalRowForExport[tf.name] = transformedRow.hasOwnProperty(tf.name) ? transformedRow[tf.name] : null;
@@ -356,21 +391,11 @@ export default function ExportDataPage() {
     const fullApiUrl = (baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl) + (selectedEntity.url.startsWith('/') ? selectedEntity.url : '/' + selectedEntity.url);
 
     try {
-      // Simulate API call
       console.log(`Simulating API export to: ${fullApiUrl}`);
-      console.log('Request Headers:', JSON.parse(JSON.stringify(requestHeaders))); // Avoid logging Bearer token directly in production logs
+      console.log('Request Headers:', JSON.parse(JSON.stringify(requestHeaders))); 
       console.log('Export Payload for API:', JSON.stringify(payload, null, 2));
       
-      // Mock API call
       await new Promise(resolve => setTimeout(resolve, 1000)); 
-
-      // Example: const response = await fetch(fullApiUrl, { method: 'POST', headers: requestHeaders, body: JSON.stringify(payload) });
-      // if (!response.ok) {
-      //   const errorData = await response.json().catch(() => ({ message: `API request failed with status ${response.status}` }));
-      //   throw new Error(errorData.message || `API request failed with status ${response.status}`);
-      // }
-      // const responseData = await response.json();
-      // showToast({ title: 'API Export Successful', description: `Data for "${selectedEntity.name}" sent. Response: ${JSON.stringify(responseData)}` });
 
       showToast({ title: 'API Export "Simulated"', description: `Data for "${selectedEntity.name}" prepared for API. Check browser console.` });
     } catch (error: any) {
@@ -391,12 +416,12 @@ export default function ExportDataPage() {
     const selectedEntity = exportConfig.entities.find(e => e.id === selectedEntityId);
     if (!selectedEntity) return;
 
-    setIsExporting(true); // Reuse isExporting state
+    setIsExporting(true); 
     setAppContextIsLoading(true);
 
     try {
       const dataToExport = transformDataForExport();
-      const headersForCsv = selectedEntity.fields.map(f => f.name); // Use target field names as CSV headers
+      const headersForCsv = selectedEntity.fields.map(f => f.name); 
       const csvString = objectsToCsv(headersForCsv, dataToExport);
 
       const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
@@ -425,23 +450,32 @@ export default function ExportDataPage() {
         showToast({ title: "Cannot Auto-map", description: "Please select an entity and ensure data columns are loaded.", variant: "destructive" });
         return;
       }
+      if (!selectedAiProvider || !selectedAiModelName) {
+        showToast({ title: 'AI Not Configured', description: 'Please select an AI provider and model in AI Settings.', variant: 'destructive'});
+        return;
+      }
       setIsAutoMapping(true);
       setAppContextIsLoading(true);
       try {
         const targetFieldsForAI = selectedEntityConfig.fields.map(f => ({ name: f.name, type: f.type || 'string' }));
-        const result = await autoColumnMapping({ sourceColumnNames: appColumns, targetFields: targetFieldsForAI });
+        const result = await autoColumnMapping({ 
+            sourceColumnNames: appColumns, 
+            targetFields: targetFieldsForAI,
+            // aiProvider: selectedAiProvider, // This flow needs to be updated to accept these
+            // aiModelName: selectedAiModelName,
+        });
         
-        const newMappings: Record<string, string> = { }; // Start fresh or merge? For AI, usually start fresh.
+        const newMappings: Record<string, string> = { }; 
         const newConfidences: Record<string, { score: number; reasoning: string } | null> = {};
 
         result.mappings.forEach(suggestion => {
-          newMappings[suggestion.targetFieldName] = suggestion.suggestedSourceColumn || ''; // Store empty string if null
+          newMappings[suggestion.targetFieldName] = suggestion.suggestedSourceColumn || ''; 
           newConfidences[suggestion.targetFieldName] = suggestion.suggestedSourceColumn ? { score: suggestion.confidenceScore, reasoning: suggestion.reasoning } : null;
         });
 
         setFieldMappings(newMappings);
         setFieldMappingConfidences(newConfidences);
-        setHasValidated(false); // Require re-validation after auto-mapping
+        setHasValidated(false); 
         setIsDataValid(false);
         setValidationMessages([]);
         showToast({ title: "Auto-mapping Complete", description: "Review the AI-suggested mappings." });
@@ -464,7 +498,7 @@ export default function ExportDataPage() {
   const noEntitiesConfigured = !exportConfig || exportConfig.entities.length === 0;
   const noDataLoaded = appData.length === 0;
 
-  if (isAuthLoading && !isAuthenticated) { // Ensure this only blocks if auth is truly loading
+  if (isAuthLoading && !isAuthenticated) { 
     return (
       <AppLayout pageTitle="Loading Export Data...">
         <div className="flex h-full items-center justify-center">
@@ -483,6 +517,7 @@ export default function ExportDataPage() {
                     <CardDescription>
                         Select the target API entity and map your current data columns to the API's expected fields.
                         Ensure entities are configured on the <Link href="/setup" className="underline text-primary hover:text-primary/80">Setup page</Link>.
+                        Lookup data for validation can be managed on the <Link href="/lookups" className="underline text-primary hover:text-primary/80">Lookups page</Link>.
                     </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6">
@@ -516,7 +551,7 @@ export default function ExportDataPage() {
                                 <h4 className="text-md font-semibold text-center md:text-left">Map Columns for "{selectedEntityConfig.name}"</h4>
                                 <Button 
                                     onClick={handleAutoMapColumns} 
-                                    disabled={isLoading || !selectedEntityConfig || noDataLoaded || appColumns.length === 0 || isAutoMapping} 
+                                    disabled={isLoading || !selectedEntityConfig || noDataLoaded || appColumns.length === 0 || isAutoMapping || (!selectedAiProvider || !selectedAiModelName)} 
                                     variant="outline"
                                     size="sm"
                                 >
@@ -529,7 +564,7 @@ export default function ExportDataPage() {
                                 <TooltipProvider>
                                     {selectedEntityConfig.fields.map(targetField => {
                                         const confidence = fieldMappingConfidences[targetField.name];
-                                        let confidenceColorClass = 'bg-muted'; // Default for no score or unmapped
+                                        let confidenceColorClass = 'bg-muted'; 
                                         let confidenceTooltip = 'No AI mapping or manually changed.';
                                         if (confidence) {
                                             if (confidence.score > 90) confidenceColorClass = 'bg-green-500';
@@ -571,6 +606,16 @@ export default function ExportDataPage() {
                                 </div>
                             </ScrollArea>
                             <p className="text-xs text-muted-foreground mt-2"><span className="text-destructive">*</span> Target API field is required and must be mapped.</p>
+                             {selectedEntityConfig.id === 'Chassis' && (!chassisOwnersData || chassisOwnersData.length === 0) && (
+                                <Alert variant="destructive" className="mt-3">
+                                <DatabaseZap className="h-4 w-4" />
+                                <AlertTitle>Chassis Lookup Data Missing</AlertTitle>
+                                <AlertDescription>
+                                    The "Chassis Owners" lookup data is not loaded. Specific validations for Chassis Owner and Size will be skipped.
+                                    Please fetch this data on the <Link href="/lookups" className="underline">Lookups page</Link> for complete validation.
+                                </AlertDescription>
+                                </Alert>
+                            )}
                         </div>
                     )}
                     {!selectedEntityConfig && exportConfig?.entities.length > 0 && (
@@ -593,7 +638,7 @@ export default function ExportDataPage() {
                         disabled={isLoading || !selectedEntityConfig || noDataLoaded} 
                         className="w-full md:w-auto"
                     >
-                        {isValidating ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : (hasValidated ? <CheckCircle className="mr-2 h-4 w-4"/> : null)}
+                        {isValidating ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : (hasValidated && isDataValid ? <CheckCircle className="mr-2 h-4 w-4"/> : (hasValidated && !isDataValid ? <AlertTriangle className="mr-2 h-4 w-4"/> : null))}
                         {isValidating ? 'Validating...' : (hasValidated ? 'Re-validate Data' : 'Validate Data')}
                     </Button>
                     {noDataLoaded && !isLoading && <p className="text-sm text-orange-600 mt-2">No data loaded to validate. Please upload a file first.</p>}
@@ -602,12 +647,12 @@ export default function ExportDataPage() {
                     <CardFooter className="flex-col items-start gap-2">
                         <Alert variant="destructive">
                             <AlertTriangle className="h-4 w-4" />
-                            <AlertTitle>Validation Errors ({validationMessages.length} found)</AlertTitle>
+                            <AlertTitle>Validation Errors ({validationMessages.length > MAX_VALIDATION_MESSAGES_DISPLAYED ? `Showing first ${MAX_VALIDATION_MESSAGES_DISPLAYED} of ` : ''}{validationMessages.length} found)</AlertTitle>
                             <ScrollArea className="max-h-60 mt-2">
                                 <AlertDescription>
                                     <ul className="list-disc pl-5 text-xs space-y-1">
-                                        {validationMessages.slice(0, 50).map((msg, index) => (<li key={index}>{msg}</li>))}
-                                        {validationMessages.length > 50 && <li>...and {validationMessages.length - 50} more errors.</li>}
+                                        {validationMessages.slice(0, MAX_VALIDATION_MESSAGES_DISPLAYED).map((msg, index) => (<li key={index}>{msg}</li>))}
+                                        {validationMessages.length > MAX_VALIDATION_MESSAGES_DISPLAYED && <li>...and {validationMessages.length - MAX_VALIDATION_MESSAGES_DISPLAYED} more errors.</li>}
                                     </ul>
                                 </AlertDescription>
                             </ScrollArea>
@@ -664,3 +709,6 @@ export default function ExportDataPage() {
     </AppLayout>
   );
 }
+
+
+    
