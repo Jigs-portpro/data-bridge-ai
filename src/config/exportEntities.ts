@@ -3,6 +3,11 @@
 // The actual entity data is stored in 'exportEntities.json' in the project root
 // and accessed via the API route /api/export-entities.
 
+export interface LookupValidationConfig {
+  lookupId: string; // Identifier for the lookup dataset (e.g., "chassisOwners")
+  lookupField: string; // The field within the lookup dataset to validate against
+}
+
 export interface ExportEntityField {
   name: string; // Target API field name
   required?: boolean;
@@ -12,6 +17,7 @@ export interface ExportEntityField {
   pattern?: string;   // For string, email (regex as string)
   minValue?: number;  // For number
   maxValue?: number;  // For number
+  lookupValidation?: LookupValidationConfig; // New property for lookup validation
 }
 
 export interface ExportEntity {
@@ -37,3 +43,4 @@ export const defaultConfig: ExportConfig = {
   baseUrl: "https://api.example.com/v1",
   entities: []
 };
+

@@ -15,7 +15,7 @@ import {
 } from '@/components/ui/select';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { useAppContext } from '@/hooks/useAppContext';
-import type { ExportEntity, ExportEntityField, ExportConfig } from '@/config/exportEntities';
+import type { ExportEntity, ExportEntityField, ExportConfig, LookupValidationConfig } from '@/config/exportEntities';
 import { objectsToCsv } from '@/lib/csvUtils';
 import { Send, AlertTriangle, Loader2, CheckCircle, DownloadCloud, Sparkles, DatabaseZap } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -68,7 +68,7 @@ export default function ExportDataPage() {
     isAuthenticated,
     isAuthLoading,
     fileName: originalFileName,
-    chassisOwnersData, // Access chassisOwnersData from context
+    chassisOwnersData, 
     selectedAiProvider,
     selectedAiModelName,
   } = useAppContext();
@@ -223,40 +223,44 @@ export default function ExportDataPage() {
             break;
         }
       }
-    });
 
-    // Chassis specific validation if errors are still low
-    if (errors.length < MAX_VALIDATION_MESSAGES_DISPLAYED && entityConfig.id === 'Chassis') {
-      if (!chassisOwnersData || chassisOwnersData.length === 0) {
-        errors.push('Chassis Validation Skipped: Lookup data for "Chassis Owners" is not loaded. Please fetch it on the Lookups page.');
-        return errors; // Return early as further chassis validation is not possible
-      }
+      // Perform lookup validation if configured
+      if (targetField.lookupValidation && stringValue !== '') {
+        const { lookupId, lookupField } = targetField.lookupValidation;
+        let lookupDataSource: any[] | null = null;
+        let lookupSourceName = 'specified lookup data';
 
-      const chassisFieldsToValidate = [
-        { targetName: "Chasis Owner", lookupColumn: "Chasis Owner" }, // Assumes lookup data has "Chasis Owner"
-        { targetName: "Chasis Size", lookupColumn: "Chasis Size" },   // Assumes lookup data has "Chasis Size"
-      ];
+        if (lookupId === 'chassisOwners') {
+          lookupDataSource = chassisOwnersData;
+          lookupSourceName = 'Chassis Owners';
+        } else {
+           // Placeholder for future lookup sources
+           if (!errors.some(e => e.includes(`Lookup source ID "${lookupId}" is not yet supported for validation.`))) {
+             errors.push(`Configuration Error: Lookup source ID "${lookupId}" for target field "${targetField.name}" is not yet supported for validation. Please check Lookups page setup.`);
+           }
+        }
 
-      for (const { targetName, lookupColumn } of chassisFieldsToValidate) {
-        const sourceColumnName = fieldMappings[targetName];
-        if (sourceColumnName && row[sourceColumnName] !== undefined && row[sourceColumnName] !== null && String(row[sourceColumnName]).trim() !== '') {
-          const valueToValidate = String(row[sourceColumnName]).trim();
-          // Ensure the lookupColumn exists in the chassisOwnersData items
-          const firstLookupItem = chassisOwnersData[0];
-          if (firstLookupItem && !(lookupColumn in firstLookupItem)) {
-            if (!errors.some(e => e.startsWith(`Lookup column "${lookupColumn}" not found`))) { // Add only once
-                 errors.push(`Lookup column "${lookupColumn}" not found in Chassis Owners data. Cannot validate.`);
+        if (lookupDataSource && lookupDataSource.length > 0) {
+          const firstLookupItem = lookupDataSource[0];
+          if (firstLookupItem && !(lookupField in firstLookupItem)) {
+            if (!errors.some(e => e.startsWith(`Lookup column "${lookupField}" not found in ${lookupSourceName}`))) {
+              errors.push(`Configuration Error for Target "${targetField.name}": Lookup column "${lookupField}" not found in ${lookupSourceName} data. Cannot validate.`);
             }
-            continue; // Skip validation for this field if lookup column doesn't exist
+          } else {
+            const foundInLookup = lookupDataSource.some(lookupRow => 
+              String(lookupRow[lookupField]).trim() === stringValue
+            );
+            if (!foundInLookup) {
+              errors.push(`Row ${rowIndex + 1}, Target "${targetField.name}" (from "${sourceColumnName}"): Value "${stringValue}" not found in ${lookupSourceName} (column: ${lookupField}).`);
+            }
           }
-
-          const foundInLookup = chassisOwnersData.some(lookupRow => String(lookupRow[lookupColumn]).trim() === valueToValidate);
-          if (!foundInLookup) {
-            errors.push(`Row ${rowIndex + 1}, Target "${targetName}" (from "${sourceColumnName}"): Value "${valueToValidate}" not found in Chassis Owners lookup data.`);
+        } else if (lookupId === 'chassisOwners' && (!lookupDataSource || lookupDataSource.length === 0)) {
+          if (!errors.some(e => e.includes('Chassis Owners lookup data is not loaded'))) { // Add only once per validation cycle
+            errors.push(`Validation Skipped for "${targetField.name}": ${lookupSourceName} lookup data is not loaded. Please fetch it on the Lookups page.`);
           }
         }
       }
-    }
+    });
     return errors;
   }, [fieldMappings, chassisOwnersData]);
 
@@ -498,6 +502,13 @@ export default function ExportDataPage() {
   const noEntitiesConfigured = !exportConfig || exportConfig.entities.length === 0;
   const noDataLoaded = appData.length === 0;
 
+  // Determine if any field in the selected entity requires 'chassisOwners' lookup
+  const requiresChassisLookup = selectedEntityConfig?.fields.some(
+    field => field.lookupValidation?.lookupId === 'chassisOwners'
+  );
+  const chassisLookupNotLoaded = requiresChassisLookup && (!chassisOwnersData || chassisOwnersData.length === 0);
+
+
   if (isAuthLoading && !isAuthenticated) { 
     return (
       <AppLayout pageTitle="Loading Export Data...">
@@ -586,6 +597,7 @@ export default function ExportDataPage() {
                                                     {targetField.name}
                                                     {targetField.required ? <span className="text-destructive ml-1">*</span> : ''}
                                                     <span className="text-xs text-muted-foreground ml-1">({targetField.type || 'any'})</span>
+                                                    {targetField.lookupValidation && <DatabaseZap className="inline-block ml-1 h-3 w-3 text-blue-500" title={`Requires lookup in '${targetField.lookupValidation.lookupId}' on field '${targetField.lookupValidation.lookupField}'`} />}
                                                 </Label>
                                             </div>
                                             <Select 
@@ -606,12 +618,12 @@ export default function ExportDataPage() {
                                 </div>
                             </ScrollArea>
                             <p className="text-xs text-muted-foreground mt-2"><span className="text-destructive">*</span> Target API field is required and must be mapped.</p>
-                             {selectedEntityConfig.id === 'Chassis' && (!chassisOwnersData || chassisOwnersData.length === 0) && (
+                             {chassisLookupNotLoaded && (
                                 <Alert variant="destructive" className="mt-3">
                                 <DatabaseZap className="h-4 w-4" />
-                                <AlertTitle>Chassis Lookup Data Missing</AlertTitle>
+                                <AlertTitle>Chassis Owners Lookup Data Missing</AlertTitle>
                                 <AlertDescription>
-                                    The "Chassis Owners" lookup data is not loaded. Specific validations for Chassis Owner and Size will be skipped.
+                                    This entity requires "Chassis Owners" lookup data for validation, but it's not currently loaded.
                                     Please fetch this data on the <Link href="/lookups" className="underline">Lookups page</Link> for complete validation.
                                 </AlertDescription>
                                 </Alert>
@@ -710,5 +722,3 @@ export default function ExportDataPage() {
   );
 }
 
-
-    
