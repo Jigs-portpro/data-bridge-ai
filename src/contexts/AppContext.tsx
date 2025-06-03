@@ -47,6 +47,8 @@ type AppContextType = {
   selectedAiModelName: string | null;
   setSelectedAiModelName: (modelName: string | null) => void;
   getEnvKeys: () => Record<string, boolean>;
+  chassisOwnersData: any[] | null; // New state for chassis owners
+  fetchAndStoreChassisOwners: () => Promise<void>; // New function
 };
 
 export const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -67,7 +69,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [selectedAiProvider, setSelectedAiProviderState] = useState<string | null>(null);
   const [selectedAiModelName, setSelectedAiModelNameState] = useState<string | null>(null);
   const [envKeys, setEnvKeys] = useState<Record<string, boolean>>({});
-
+  const [chassisOwnersData, setChassisOwnersDataState] = useState<any[] | null>(null); // Initialize chassis owners data
 
   const { toast } = useToast();
   const router = useRouter();
@@ -75,48 +77,46 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const fetchEnvKeys = useCallback(async () => {
     try {
-      const response = await fetch('/api/env-check'); // You'll need to create this API route
+      const response = await fetch('/api/env-check'); 
       if (response.ok) {
         const keys = await response.json();
         setEnvKeys(keys);
         
-        // Initialize AI provider and model from localStorage or defaults
         const storedProvider = typeof window !== 'undefined' ? localStorage.getItem(AI_PROVIDER_STORAGE_KEY) : null;
         const storedModel = typeof window !== 'undefined' ? localStorage.getItem(AI_MODEL_NAME_STORAGE_KEY) : null;
 
         if (storedProvider && storedModel && keys[storedProvider.toUpperCase() + '_API_KEY']) {
           setSelectedAiProviderState(storedProvider);
           setSelectedAiModelNameState(storedModel);
-        } else if (keys.GOOGLE_API_KEY) { // Default to Google if its key exists and nothing valid stored
+        } else if (keys.GOOGLE_API_KEY) { 
           setSelectedAiProviderState(DEFAULT_AI_PROVIDER);
           setSelectedAiModelNameState(DEFAULT_AI_MODEL_NAME);
           if (typeof window !== 'undefined') {
             localStorage.setItem(AI_PROVIDER_STORAGE_KEY, DEFAULT_AI_PROVIDER);
             localStorage.setItem(AI_MODEL_NAME_STORAGE_KEY, DEFAULT_AI_MODEL_NAME);
           }
-        } else if (keys.OPENAI_API_KEY) { // Fallback to OpenAI
+        } else if (keys.OPENAI_API_KEY) { 
             setSelectedAiProviderState('openai');
-            setSelectedAiModelNameState('gpt-4o-mini'); // A common OpenAI default
+            setSelectedAiModelNameState('gpt-4o-mini'); 
             if (typeof window !== 'undefined') {
               localStorage.setItem(AI_PROVIDER_STORAGE_KEY, 'openai');
               localStorage.setItem(AI_MODEL_NAME_STORAGE_KEY, 'gpt-4o-mini');
             }
-        } else if (keys.ANTHROPIC_API_KEY) { // Fallback to Anthropic
+        } else if (keys.ANTHROPIC_API_KEY) { 
             setSelectedAiProviderState('anthropic');
-            setSelectedAiModelNameState('claude-3-haiku-20240307'); // A common Anthropic default
+            setSelectedAiModelNameState('claude-3-haiku-20240307'); 
             if (typeof window !== 'undefined') {
               localStorage.setItem(AI_PROVIDER_STORAGE_KEY, 'anthropic');
               localStorage.setItem(AI_MODEL_NAME_STORAGE_KEY, 'claude-3-haiku-20240307');
             }
         } else {
-            // No API keys found, or stored selection is invalid
             setSelectedAiProviderState(null);
             setSelectedAiModelNameState(null);
         }
 
       } else {
         console.error('Failed to fetch env key status');
-         setSelectedAiProviderState(null); // Fallback if API fails
+         setSelectedAiProviderState(null); 
          setSelectedAiModelNameState(null);
       }
     } catch (error) {
@@ -156,12 +156,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setDataState(newData);
     if (newData.length > 0) {
       const newKeys = Object.keys(newData[0]);
+       // Preserve existing columns and add new ones if they don't exist
       setColumnsState(prevCols => {
         const combined = new Set([...prevCols, ...newKeys]);
         return Array.from(combined);
       });
     } else {
-      setColumnsState([]);
+      // If new data is empty, we might not want to clear columns if they were set by other means
+      // Or, if data being empty means columns should be reset, then:
+      // setColumnsState([]); 
+      // For now, let's only update columns if new data has keys, otherwise leave columns as they are.
     }
   }, []);
   
@@ -200,17 +204,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setChatHistory([]);
   }, []);
 
-  const login = useCallback((username: string, pass: string): boolean => {
-    if (username === HARDCODED_USERNAME && pass === HARDCODED_PASSWORD) {
-      setIsAuthenticatedState(true);
-      if (typeof window !== 'undefined') localStorage.setItem('appIsAuthenticated', 'true');
-      router.push('/');
-      return true;
-    }
-    showToast({ title: 'Login Failed', description: 'Invalid username or password.', variant: 'destructive' });
-    return false;
-  }, [router, showToast]);
-
   const setCurrentCompanyName = useCallback((name: string | null) => {
     setCurrentCompanyNameState(name);
     if (typeof window !== 'undefined') {
@@ -221,39 +214,43 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         }
     }
   }, []);
-
+  
   const clearApiToken = useCallback(() => {
     if (typeof window !== 'undefined') localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
-    setCurrentCompanyName(null); 
-  }, [setCurrentCompanyName]);
+    // Do not clear company name here, it might be set independently or come from token response
+    // If it should be cleared, call setCurrentCompanyName(null) explicitly where needed.
+  }, []);
+  
+  const login = useCallback((username: string, pass: string): boolean => {
+    if (username === HARDCODED_USERNAME && pass === HARDCODED_PASSWORD) {
+      setIsAuthenticatedState(true);
+      if (typeof window !== 'undefined') localStorage.setItem('appIsAuthenticated', 'true');
+      router.push('/');
+      return true;
+    }
+    showToast({ title: 'Login Failed', description: 'Invalid username or password.', variant: 'destructive' });
+    return false;
+  }, [router, showToast]);
   
   const logout = useCallback(() => {
     setIsAuthenticatedState(false);
     if (typeof window !== 'undefined') localStorage.removeItem('appIsAuthenticated');
     clearApiToken(); 
+    setCurrentCompanyNameState(null); // Explicitly clear company name on logout
+    if (typeof window !== 'undefined') localStorage.removeItem(AUTH_COMPANY_STORAGE_KEY);
     setChatHistory([]);
     setDataState([]);
     setColumnsState([]);
     setFileNameState(null);
     router.push('/login');
-  }, [router, clearApiToken, showToast]); // Keep clearApiToken if it's stable and this doesn't fix. Try removing first.
-  // Corrected line: removed clearApiToken from dependency array as it's stable.
-  // const logout = useCallback(() => {
-  //   setIsAuthenticatedState(false);
-  //   if (typeof window !== 'undefined') localStorage.removeItem('appIsAuthenticated');
-  //   clearApiToken(); 
-  //   setChatHistory([]);
-  //   setDataState([]);
-  //   setColumnsState([]);
-  //   setFileNameState(null);
-  //   router.push('/login');
-  // }, [router, showToast]); // Removed clearApiToken
+  }, [router, showToast, clearApiToken]);
 
   const storeApiToken = useCallback((token: string, companyName?: string | null) => {
     if (typeof window !== 'undefined') localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, token);
     if (companyName) {
       setCurrentCompanyName(companyName);
     } else {
+      // If companyName is explicitly null or undefined from response, clear it
       setCurrentCompanyName(null);
     }
   }, [setCurrentCompanyName]);
@@ -289,6 +286,43 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   
   const getEnvKeys = useCallback(() => envKeys, [envKeys]);
 
+  const fetchAndStoreChassisOwners = useCallback(async () => {
+    const token = getApiToken();
+    if (!token) {
+      showToast({ title: 'Authentication Required', description: 'Please set API token first.', variant: 'destructive' });
+      return;
+    }
+    setIsLoading(true);
+    try {
+      const response = await fetch('https://api.axle.network/carrier/getTMSChassisOwner', {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json, text/plain, */*',
+        },
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ message: `API Error: ${response.status}` }));
+        throw new Error(errorData.message || `Failed to fetch chassis owners: ${response.status}`);
+      }
+
+      const resultData = await response.json();
+      // Assuming resultData is the array of owners. If it's nested (e.g., resultData.data), adjust here.
+      // For example: const owners = Array.isArray(resultData) ? resultData : (resultData.data || []);
+      const owners = Array.isArray(resultData) ? resultData : (resultData.data && Array.isArray(resultData.data)) ? resultData.data : [];
+      
+      setChassisOwnersDataState(owners);
+      showToast({ title: 'Success', description: `${owners.length} chassis owners fetched and cached.` });
+    } catch (error: any) {
+      console.error('Error fetching chassis owners:', error);
+      showToast({ title: 'Fetch Error', description: error.message || 'Could not fetch chassis owners.', variant: 'destructive' });
+      setChassisOwnersDataState(null);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [getApiToken, setIsLoading, showToast]);
+
 
   return (
     <AppContext.Provider
@@ -322,6 +356,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         selectedAiModelName,
         setSelectedAiModelName,
         getEnvKeys,
+        chassisOwnersData,
+        fetchAndStoreChassisOwners,
       }}
     >
       {children}

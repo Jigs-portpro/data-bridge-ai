@@ -16,7 +16,8 @@ import {
   KeyRound,
   Send,
   Cpu, 
-  MapPin, // Added MapPin icon
+  MapPin,
+  ListChecks, // Added for new button
 } from 'lucide-react';
 import {
   Sidebar,
@@ -41,15 +42,20 @@ const toolConfig = [
   { name: 'Column Reorder', id: 'reorder', icon: Shuffle, description: 'Intelligently reorder columns' },
   { name: 'Anomaly Report', id: 'anomaly', icon: Siren, description: 'Identify potential anomalies' },
   { name: 'Duplicate Detection', id: 'duplicate', icon: CopyCheck, description: 'Find and flag duplicates' },
-  { name: 'Address Processing', id: 'addressProcessing', icon: MapPin, description: 'Clean & geocode addresses' }, // New tool
+  { name: 'Address Processing', id: 'addressProcessing', icon: MapPin, description: 'Clean & geocode addresses' },
 ];
 
 export function DataToolsSidebar() {
-  const { openDialog, data, isAuthenticated, logout } = useAppContext();
+  const { openDialog, data, isAuthenticated, logout, fetchAndStoreChassisOwners, isLoading: isAppLoading } = useAppContext();
   const isDataLoaded = data.length > 0;
 
   const isAIDisabled = !isDataLoaded || !isAuthenticated;
   const isExportDataDisabled = !isDataLoaded || !isAuthenticated; 
+  const isDataSyncDisabled = !isAuthenticated || isAppLoading;
+
+  const handleFetchChassisOwners = async () => {
+      await fetchAndStoreChassisOwners();
+  };
 
   return (
     <Sidebar collapsible="icon" variant="sidebar" className="border-r">
@@ -80,6 +86,27 @@ export function DataToolsSidebar() {
                             </SidebarMenuButton>
                             </SidebarMenuItem>
                         ))}
+                    </SidebarMenu>
+                </SidebarGroupContent>
+            </SidebarGroup>
+            
+            <SidebarSeparator className="my-2" />
+
+            <SidebarGroup>
+                <SidebarGroupLabel className="group-data-[collapsible=icon]:hidden">Data Sync</SidebarGroupLabel>
+                <SidebarGroupContent>
+                    <SidebarMenu>
+                        <SidebarMenuItem>
+                            <SidebarMenuButton
+                                onClick={handleFetchChassisOwners}
+                                disabled={isDataSyncDisabled}
+                                tooltip={{children: "Fetch Chassis Owners", side:"right", align:"center"}}
+                                className={cn("justify-start", isDataSyncDisabled && "opacity-50 pointer-events-none")}
+                            >
+                                <ListChecks className="h-5 w-5" />
+                                <span className="group-data-[collapsible=icon]:hidden">Fetch Chassis Owners</span>
+                            </SidebarMenuButton>
+                        </SidebarMenuItem>
                     </SidebarMenu>
                 </SidebarGroupContent>
             </SidebarGroup>
