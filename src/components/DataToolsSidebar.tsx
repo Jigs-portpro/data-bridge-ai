@@ -17,8 +17,7 @@ import {
   Send,
   Cpu, 
   MapPin,
-  ListChecks,
-  Trash2, // Added for clear button
+  DatabaseZap, // Changed from ListChecks/Trash2
 } from 'lucide-react';
 import {
   Sidebar,
@@ -52,22 +51,21 @@ export function DataToolsSidebar() {
     data, 
     isAuthenticated, 
     logout, 
-    fetchAndStoreChassisOwners, 
+    // fetchAndStoreChassisOwners, // No longer called directly from sidebar
     isLoading: isAppLoading,
-    chassisOwnersData, // Get cached data
-    clearChassisOwnersData // Get clear function
+    // chassisOwnersData, // No longer directly needed for sidebar logic
+    // clearChassisOwnersData // No longer called directly from sidebar
   } = useAppContext();
   const isDataLoaded = data.length > 0;
 
   const isAIDisabled = !isDataLoaded || !isAuthenticated;
   const isExportDataDisabled = !isDataLoaded || !isAuthenticated; 
-  const isDataSyncDisabled = !isAuthenticated || isAppLoading;
-  const isClearChassisDataDisabled = !isAuthenticated || isAppLoading || !chassisOwnersData || chassisOwnersData.length === 0;
+  const isLookupPageDisabled = !isAuthenticated || isAppLoading;
 
 
-  const handleFetchChassisOwners = async () => {
-      await fetchAndStoreChassisOwners();
-  };
+  // const handleFetchChassisOwners = async () => { // Removed
+  //     await fetchAndStoreChassisOwners();
+  // };
 
   return (
     <Sidebar collapsible="icon" variant="sidebar" className="border-r">
@@ -105,30 +103,30 @@ export function DataToolsSidebar() {
             <SidebarSeparator className="my-2" />
 
             <SidebarGroup>
-                <SidebarGroupLabel className="group-data-[collapsible=icon]:hidden">Data Sync</SidebarGroupLabel>
+                <SidebarGroupLabel className="group-data-[collapsible=icon]:hidden">Data Management</SidebarGroupLabel>
                 <SidebarGroupContent>
                     <SidebarMenu>
                         <SidebarMenuItem>
-                            <SidebarMenuButton
-                                onClick={handleFetchChassisOwners}
-                                disabled={isDataSyncDisabled}
-                                tooltip={{children: "Fetch Chassis Owners", side:"right", align:"center"}}
-                                className={cn("justify-start", isDataSyncDisabled && "opacity-50 pointer-events-none")}
+                             <Link
+                                href="/lookups"
+                                passHref
+                                legacyBehavior
+                                onClick={(e) => { if (isLookupPageDisabled) e.preventDefault(); }}
+                                aria-disabled={isLookupPageDisabled}
+                                tabIndex={isLookupPageDisabled ? -1 : undefined}
                             >
-                                <ListChecks className="h-5 w-5" />
-                                <span className="group-data-[collapsible=icon]:hidden">Fetch Chassis Owners</span>
-                            </SidebarMenuButton>
-                        </SidebarMenuItem>
-                        <SidebarMenuItem>
-                            <SidebarMenuButton
-                                onClick={clearChassisOwnersData}
-                                disabled={isClearChassisDataDisabled}
-                                tooltip={{children: "Clear Chassis Owners Cache", side:"right", align:"center"}}
-                                className={cn("justify-start", isClearChassisDataDisabled && "opacity-50 pointer-events-none")}
-                            >
-                                <Trash2 className="h-5 w-5" />
-                                <span className="group-data-[collapsible=icon]:hidden">Clear Chassis Cache</span>
-                            </SidebarMenuButton>
+                                <SidebarMenuButton
+                                    disabled={isLookupPageDisabled}
+                                    tooltip={{children: "Manage Lookups", side:"right", align:"center"}}
+                                    className={cn("justify-start w-full", isLookupPageDisabled && "opacity-50 pointer-events-none")}
+                                    asChild
+                                >
+                                   <a>
+                                    <DatabaseZap className="h-5 w-5" />
+                                    <span className="group-data-[collapsible=icon]:hidden">Manage Lookups</span>
+                                   </a>
+                                </SidebarMenuButton>
+                            </Link>
                         </SidebarMenuItem>
                     </SidebarMenu>
                 </SidebarGroupContent>
@@ -261,3 +259,4 @@ export function DataToolsSidebar() {
       </Sidebar>
   );
 }
+
