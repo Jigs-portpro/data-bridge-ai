@@ -17,7 +17,8 @@ import {
   Send,
   Cpu, 
   MapPin,
-  ListChecks, // Added for new button
+  ListChecks,
+  Trash2, // Added for clear button
 } from 'lucide-react';
 import {
   Sidebar,
@@ -46,12 +47,23 @@ const toolConfig = [
 ];
 
 export function DataToolsSidebar() {
-  const { openDialog, data, isAuthenticated, logout, fetchAndStoreChassisOwners, isLoading: isAppLoading } = useAppContext();
+  const { 
+    openDialog, 
+    data, 
+    isAuthenticated, 
+    logout, 
+    fetchAndStoreChassisOwners, 
+    isLoading: isAppLoading,
+    chassisOwnersData, // Get cached data
+    clearChassisOwnersData // Get clear function
+  } = useAppContext();
   const isDataLoaded = data.length > 0;
 
   const isAIDisabled = !isDataLoaded || !isAuthenticated;
   const isExportDataDisabled = !isDataLoaded || !isAuthenticated; 
   const isDataSyncDisabled = !isAuthenticated || isAppLoading;
+  const isClearChassisDataDisabled = !isAuthenticated || isAppLoading || !chassisOwnersData || chassisOwnersData.length === 0;
+
 
   const handleFetchChassisOwners = async () => {
       await fetchAndStoreChassisOwners();
@@ -107,6 +119,17 @@ export function DataToolsSidebar() {
                                 <span className="group-data-[collapsible=icon]:hidden">Fetch Chassis Owners</span>
                             </SidebarMenuButton>
                         </SidebarMenuItem>
+                        <SidebarMenuItem>
+                            <SidebarMenuButton
+                                onClick={clearChassisOwnersData}
+                                disabled={isClearChassisDataDisabled}
+                                tooltip={{children: "Clear Chassis Owners Cache", side:"right", align:"center"}}
+                                className={cn("justify-start", isClearChassisDataDisabled && "opacity-50 pointer-events-none")}
+                            >
+                                <Trash2 className="h-5 w-5" />
+                                <span className="group-data-[collapsible=icon]:hidden">Clear Chassis Cache</span>
+                            </SidebarMenuButton>
+                        </SidebarMenuItem>
                     </SidebarMenu>
                 </SidebarGroupContent>
             </SidebarGroup>
@@ -121,7 +144,7 @@ export function DataToolsSidebar() {
                             <Link
                                 href="/export-data"
                                 passHref
-                                legacyBehavior
+                                legacyBehavior // Required for Next.js <Link> with custom child like SidebarMenuButton
                                 onClick={(e) => {
                                     if (isExportDataDisabled) {
                                     e.preventDefault();
@@ -137,9 +160,9 @@ export function DataToolsSidebar() {
                                         "justify-start w-full", 
                                         isExportDataDisabled && "opacity-50 pointer-events-none"
                                     )}
-                                    asChild
+                                    asChild // Important for <Link> to correctly style the <a> tag
                                 >
-                                   <a> 
+                                   <a> {/* This <a> tag is the actual child that <Link> will wrap */}
                                     <Send className="h-5 w-5" />
                                     <span className="group-data-[collapsible=icon]:hidden">Export Data</span>
                                    </a>

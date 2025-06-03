@@ -47,8 +47,9 @@ type AppContextType = {
   selectedAiModelName: string | null;
   setSelectedAiModelName: (modelName: string | null) => void;
   getEnvKeys: () => Record<string, boolean>;
-  chassisOwnersData: any[] | null; // New state for chassis owners
-  fetchAndStoreChassisOwners: () => Promise<void>; // New function
+  chassisOwnersData: any[] | null;
+  fetchAndStoreChassisOwners: () => Promise<void>;
+  clearChassisOwnersData: () => void; // New function to clear data
 };
 
 export const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -69,7 +70,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [selectedAiProvider, setSelectedAiProviderState] = useState<string | null>(null);
   const [selectedAiModelName, setSelectedAiModelNameState] = useState<string | null>(null);
   const [envKeys, setEnvKeys] = useState<Record<string, boolean>>({});
-  const [chassisOwnersData, setChassisOwnersDataState] = useState<any[] | null>(null); // Initialize chassis owners data
+  const [chassisOwnersData, setChassisOwnersDataState] = useState<any[] | null>(null);
 
   const { toast } = useToast();
   const router = useRouter();
@@ -156,16 +157,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setDataState(newData);
     if (newData.length > 0) {
       const newKeys = Object.keys(newData[0]);
-       // Preserve existing columns and add new ones if they don't exist
       setColumnsState(prevCols => {
         const combined = new Set([...prevCols, ...newKeys]);
         return Array.from(combined);
       });
-    } else {
-      // If new data is empty, we might not want to clear columns if they were set by other means
-      // Or, if data being empty means columns should be reset, then:
-      // setColumnsState([]); 
-      // For now, let's only update columns if new data has keys, otherwise leave columns as they are.
     }
   }, []);
   
@@ -190,8 +185,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const showToast = useCallback(
-    (options: { title: string; description?: string; variant?: ToastProps['variant'] }) => {
-      toast(options);
+    (options: { title: string; description?: string; variant?: ToastProps['variant'], duration?: number }) => {
+      toast({...options, duration: options.duration || 5000});
     },
     [toast]
   );
@@ -217,8 +212,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   
   const clearApiToken = useCallback(() => {
     if (typeof window !== 'undefined') localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
-    // Do not clear company name here, it might be set independently or come from token response
-    // If it should be cleared, call setCurrentCompanyName(null) explicitly where needed.
   }, []);
   
   const login = useCallback((username: string, pass: string): boolean => {
@@ -236,7 +229,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setIsAuthenticatedState(false);
     if (typeof window !== 'undefined') localStorage.removeItem('appIsAuthenticated');
     clearApiToken(); 
-    setCurrentCompanyNameState(null); // Explicitly clear company name on logout
+    setCurrentCompanyNameState(null); 
     if (typeof window !== 'undefined') localStorage.removeItem(AUTH_COMPANY_STORAGE_KEY);
     setChatHistory([]);
     setDataState([]);
@@ -250,7 +243,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (companyName) {
       setCurrentCompanyName(companyName);
     } else {
-      // If companyName is explicitly null or undefined from response, clear it
       setCurrentCompanyName(null);
     }
   }, [setCurrentCompanyName]);
@@ -288,40 +280,56 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const fetchAndStoreChassisOwners = useCallback(async () => {
     const token = getApiToken();
+    console.log("Using token for Chassis Owners fetch:", token ? "Token present" : "Token MISSING");
     if (!token) {
-      showToast({ title: 'Authentication Required', description: 'Please set API token first.', variant: 'destructive' });
+      showToast({ title: 'Authentication Required', description: 'API token is missing. Please set it on the API Auth page.', variant: 'destructive', duration: 7000 });
       return;
     }
     setIsLoading(true);
     try {
+      console.log("Fetching chassis owners from: https://api.axle.network/carrier/getTMSChassisOwner");
       const response = await fetch('https://api.axle.network/carrier/getTMSChassisOwner', {
         method: 'GET',
         headers: {
-          'Authorization': `Bearer ${token}`,
+          'Authorization': `Bearer ${token}`, // Ensure token is not double-quoted
           'Accept': 'application/json, text/plain, */*',
+          // The other headers from curl (User-Agent, sec-ch-ua etc.) are browser-managed or less critical for server-to-server.
         },
       });
 
+      console.log("Chassis Owners API Response Status:", response.status, response.statusText);
+
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ message: `API Error: ${response.status}` }));
+        let errorData = { message: `API Error: ${response.status} ${response.statusText}` };
+        try {
+          errorData = await response.json();
+          console.error("Chassis Owners API Error Response Body:", errorData);
+        } catch (e) {
+          console.error("Chassis Owners API Error: Could not parse error response JSON.");
+        }
         throw new Error(errorData.message || `Failed to fetch chassis owners: ${response.status}`);
       }
 
       const resultData = await response.json();
-      // Assuming resultData is the array of owners. If it's nested (e.g., resultData.data), adjust here.
-      // For example: const owners = Array.isArray(resultData) ? resultData : (resultData.data || []);
+      console.log("Chassis Owners API Success Response Body:", resultData);
+      
       const owners = Array.isArray(resultData) ? resultData : (resultData.data && Array.isArray(resultData.data)) ? resultData.data : [];
       
       setChassisOwnersDataState(owners);
       showToast({ title: 'Success', description: `${owners.length} chassis owners fetched and cached.` });
     } catch (error: any) {
       console.error('Error fetching chassis owners:', error);
-      showToast({ title: 'Fetch Error', description: error.message || 'Could not fetch chassis owners.', variant: 'destructive' });
+      showToast({ title: 'Fetch Error', description: error.message || 'Could not fetch chassis owners.', variant: 'destructive', duration: 7000 });
       setChassisOwnersDataState(null);
     } finally {
       setIsLoading(false);
     }
   }, [getApiToken, setIsLoading, showToast]);
+
+  const clearChassisOwnersData = useCallback(() => {
+    setChassisOwnersDataState(null);
+    showToast({ title: 'Cache Cleared', description: 'Chassis owner data has been cleared from local cache.' });
+  }, [showToast]);
 
 
   return (
@@ -358,6 +366,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         getEnvKeys,
         chassisOwnersData,
         fetchAndStoreChassisOwners,
+        clearChassisOwnersData,
       }}
     >
       {children}
