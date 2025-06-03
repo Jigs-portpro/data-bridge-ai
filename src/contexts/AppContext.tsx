@@ -73,7 +73,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
 
-  const fetchEnvKeys = async () => {
+  const fetchEnvKeys = useCallback(async () => {
     try {
       const response = await fetch('/api/env-check'); // You'll need to create this API route
       if (response.ok) {
@@ -81,8 +81,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setEnvKeys(keys);
         
         // Initialize AI provider and model from localStorage or defaults
-        const storedProvider = localStorage.getItem(AI_PROVIDER_STORAGE_KEY);
-        const storedModel = localStorage.getItem(AI_MODEL_NAME_STORAGE_KEY);
+        const storedProvider = typeof window !== 'undefined' ? localStorage.getItem(AI_PROVIDER_STORAGE_KEY) : null;
+        const storedModel = typeof window !== 'undefined' ? localStorage.getItem(AI_MODEL_NAME_STORAGE_KEY) : null;
 
         if (storedProvider && storedModel && keys[storedProvider.toUpperCase() + '_API_KEY']) {
           setSelectedAiProviderState(storedProvider);
@@ -90,18 +90,24 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         } else if (keys.GOOGLE_API_KEY) { // Default to Google if its key exists and nothing valid stored
           setSelectedAiProviderState(DEFAULT_AI_PROVIDER);
           setSelectedAiModelNameState(DEFAULT_AI_MODEL_NAME);
-          localStorage.setItem(AI_PROVIDER_STORAGE_KEY, DEFAULT_AI_PROVIDER);
-          localStorage.setItem(AI_MODEL_NAME_STORAGE_KEY, DEFAULT_AI_MODEL_NAME);
+          if (typeof window !== 'undefined') {
+            localStorage.setItem(AI_PROVIDER_STORAGE_KEY, DEFAULT_AI_PROVIDER);
+            localStorage.setItem(AI_MODEL_NAME_STORAGE_KEY, DEFAULT_AI_MODEL_NAME);
+          }
         } else if (keys.OPENAI_API_KEY) { // Fallback to OpenAI
             setSelectedAiProviderState('openai');
             setSelectedAiModelNameState('gpt-4o-mini'); // A common OpenAI default
-            localStorage.setItem(AI_PROVIDER_STORAGE_KEY, 'openai');
-            localStorage.setItem(AI_MODEL_NAME_STORAGE_KEY, 'gpt-4o-mini');
+            if (typeof window !== 'undefined') {
+              localStorage.setItem(AI_PROVIDER_STORAGE_KEY, 'openai');
+              localStorage.setItem(AI_MODEL_NAME_STORAGE_KEY, 'gpt-4o-mini');
+            }
         } else if (keys.ANTHROPIC_API_KEY) { // Fallback to Anthropic
             setSelectedAiProviderState('anthropic');
             setSelectedAiModelNameState('claude-3-haiku-20240307'); // A common Anthropic default
-            localStorage.setItem(AI_PROVIDER_STORAGE_KEY, 'anthropic');
-            localStorage.setItem(AI_MODEL_NAME_STORAGE_KEY, 'claude-3-haiku-20240307');
+            if (typeof window !== 'undefined') {
+              localStorage.setItem(AI_PROVIDER_STORAGE_KEY, 'anthropic');
+              localStorage.setItem(AI_MODEL_NAME_STORAGE_KEY, 'claude-3-haiku-20240307');
+            }
         } else {
             // No API keys found, or stored selection is invalid
             setSelectedAiProviderState(null);
@@ -118,23 +124,22 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
        setSelectedAiProviderState(null);
        setSelectedAiModelNameState(null);
     }
-  };
+  }, []);
 
 
   useEffect(() => {
-    const appAuth = localStorage.getItem('appIsAuthenticated');
+    const appAuth = typeof window !== 'undefined' ? localStorage.getItem('appIsAuthenticated') : null;
     if (appAuth === 'true') {
       setIsAuthenticatedState(true);
     }
     setIsAuthLoading(false);
 
-    const storedToken = localStorage.getItem(AUTH_TOKEN_STORAGE_KEY);
-    const storedCompany = localStorage.getItem(AUTH_COMPANY_STORAGE_KEY);
+    const storedCompany = typeof window !== 'undefined' ? localStorage.getItem(AUTH_COMPANY_STORAGE_KEY) : null;
     if (storedCompany) {
       setCurrentCompanyNameState(storedCompany);
     }
-    fetchEnvKeys(); // Fetch env keys which then sets AI provider/model
-  }, []);
+    fetchEnvKeys(); 
+  }, [fetchEnvKeys]);
 
 
   useEffect(() => {
@@ -150,7 +155,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const setData = useCallback((newData: Record<string, any>[]) => {
     setDataState(newData);
     if (newData.length > 0) {
-      setColumnsState(Object.keys(newData[0]));
+      const newKeys = Object.keys(newData[0]);
+      setColumnsState(prevCols => {
+        const combined = new Set([...prevCols, ...newKeys]);
+        return Array.from(combined);
+      });
     } else {
       setColumnsState([]);
     }
@@ -194,7 +203,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const login = useCallback((username: string, pass: string): boolean => {
     if (username === HARDCODED_USERNAME && pass === HARDCODED_PASSWORD) {
       setIsAuthenticatedState(true);
-      localStorage.setItem('appIsAuthenticated', 'true');
+      if (typeof window !== 'undefined') localStorage.setItem('appIsAuthenticated', 'true');
       router.push('/');
       return true;
     }
@@ -202,33 +211,46 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     return false;
   }, [router, showToast]);
 
+  const setCurrentCompanyName = useCallback((name: string | null) => {
+    setCurrentCompanyNameState(name);
+    if (typeof window !== 'undefined') {
+        if (name) {
+        localStorage.setItem(AUTH_COMPANY_STORAGE_KEY, name);
+        } else {
+        localStorage.removeItem(AUTH_COMPANY_STORAGE_KEY);
+        }
+    }
+  }, []);
+
+  const clearApiToken = useCallback(() => {
+    if (typeof window !== 'undefined') localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
+    setCurrentCompanyName(null); 
+  }, [setCurrentCompanyName]);
+  
   const logout = useCallback(() => {
     setIsAuthenticatedState(false);
-    localStorage.removeItem('appIsAuthenticated');
+    if (typeof window !== 'undefined') localStorage.removeItem('appIsAuthenticated');
     clearApiToken(); 
     setChatHistory([]);
     setDataState([]);
     setColumnsState([]);
     setFileNameState(null);
-    // Optionally clear AI selection from localStorage on logout
-    // localStorage.removeItem(AI_PROVIDER_STORAGE_KEY);
-    // localStorage.removeItem(AI_MODEL_NAME_STORAGE_KEY);
-    // setSelectedAiProviderState(DEFAULT_AI_PROVIDER); // Or null if no keys
-    // setSelectedAiModelNameState(DEFAULT_AI_MODEL_NAME);
     router.push('/login');
-  }, [router]); // Removed clearApiToken from deps, it's stable
-
-  const setCurrentCompanyName = useCallback((name: string | null) => {
-    setCurrentCompanyNameState(name);
-    if (name) {
-      localStorage.setItem(AUTH_COMPANY_STORAGE_KEY, name);
-    } else {
-      localStorage.removeItem(AUTH_COMPANY_STORAGE_KEY);
-    }
-  }, []);
+  }, [router, clearApiToken, showToast]); // Keep clearApiToken if it's stable and this doesn't fix. Try removing first.
+  // Corrected line: removed clearApiToken from dependency array as it's stable.
+  // const logout = useCallback(() => {
+  //   setIsAuthenticatedState(false);
+  //   if (typeof window !== 'undefined') localStorage.removeItem('appIsAuthenticated');
+  //   clearApiToken(); 
+  //   setChatHistory([]);
+  //   setDataState([]);
+  //   setColumnsState([]);
+  //   setFileNameState(null);
+  //   router.push('/login');
+  // }, [router, showToast]); // Removed clearApiToken
 
   const storeApiToken = useCallback((token: string, companyName?: string | null) => {
-    localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, token);
+    if (typeof window !== 'undefined') localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, token);
     if (companyName) {
       setCurrentCompanyName(companyName);
     } else {
@@ -236,11 +258,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   }, [setCurrentCompanyName]);
 
-  const clearApiToken = useCallback(() => {
-    localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
-    setCurrentCompanyName(null);
-  }, [setCurrentCompanyName]);
-  
   const getApiToken = useCallback(() => {
     if (typeof window !== 'undefined') {
       return localStorage.getItem(AUTH_TOKEN_STORAGE_KEY);
@@ -250,19 +267,23 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const setSelectedAiProvider = useCallback((provider: string | null) => {
     setSelectedAiProviderState(provider);
-    if (provider) {
-      localStorage.setItem(AI_PROVIDER_STORAGE_KEY, provider);
-    } else {
-      localStorage.removeItem(AI_PROVIDER_STORAGE_KEY);
+    if (typeof window !== 'undefined') {
+        if (provider) {
+        localStorage.setItem(AI_PROVIDER_STORAGE_KEY, provider);
+        } else {
+        localStorage.removeItem(AI_PROVIDER_STORAGE_KEY);
+        }
     }
   }, []);
 
   const setSelectedAiModelName = useCallback((modelName: string | null) => {
     setSelectedAiModelNameState(modelName);
-    if (modelName) {
-      localStorage.setItem(AI_MODEL_NAME_STORAGE_KEY, modelName);
-    } else {
-      localStorage.removeItem(AI_MODEL_NAME_STORAGE_KEY);
+    if (typeof window !== 'undefined') {
+        if (modelName) {
+        localStorage.setItem(AI_MODEL_NAME_STORAGE_KEY, modelName);
+        } else {
+        localStorage.removeItem(AI_MODEL_NAME_STORAGE_KEY);
+        }
     }
   }, []);
   

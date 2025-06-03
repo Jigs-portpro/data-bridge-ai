@@ -10,6 +10,7 @@ import { DataEnrichmentDialog } from '@/components/dialogs/DataEnrichmentDialog'
 import { ColumnReorderDialog } from '@/components/dialogs/ColumnReorderDialog';
 import { AnomalyReportDialog } from '@/components/dialogs/AnomalyReportDialog';
 import { DuplicateDetectionDialog } from '@/components/dialogs/DuplicateDetectionDialog';
+import { AddressProcessingDialog } from '@/components/dialogs/AddressProcessingDialog'; // Added new dialog
 import { SidebarProvider, SidebarInset, SidebarTrigger } from '@/components/ui/sidebar';
 import { Separator } from '@/components/ui/separator';
 import { Button } from '@/components/ui/button';
@@ -78,6 +79,7 @@ export function AppLayout({ children, pageTitle }: { children?: React.ReactNode;
       {activeDialog === 'reorder' && <ColumnReorderDialog />}
       {activeDialog === 'anomaly' && <AnomalyReportDialog />}
       {activeDialog === 'duplicate' && <DuplicateDetectionDialog />}
+      {activeDialog === 'addressProcessing' && <AddressProcessingDialog />} {/* Added new dialog */}
     </SidebarProvider>
   );
 }

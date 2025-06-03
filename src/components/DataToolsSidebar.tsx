@@ -15,7 +15,8 @@ import {
   Settings,
   KeyRound,
   Send,
-  Cpu, // Added Cpu icon for AI Settings
+  Cpu, 
+  MapPin, // Added MapPin icon
 } from 'lucide-react';
 import {
   Sidebar,
@@ -40,6 +41,7 @@ const toolConfig = [
   { name: 'Column Reorder', id: 'reorder', icon: Shuffle, description: 'Intelligently reorder columns' },
   { name: 'Anomaly Report', id: 'anomaly', icon: Siren, description: 'Identify potential anomalies' },
   { name: 'Duplicate Detection', id: 'duplicate', icon: CopyCheck, description: 'Find and flag duplicates' },
+  { name: 'Address Processing', id: 'addressProcessing', icon: MapPin, description: 'Clean & geocode addresses' }, // New tool
 ];
 
 export function DataToolsSidebar() {
@@ -71,7 +73,7 @@ export function DataToolsSidebar() {
                                 onClick={() => openDialog(tool.id)}
                                 disabled={isAIDisabled}
                                 tooltip={{children: tool.name, side:"right", align:"center"}}
-                                className="justify-start"
+                                className={cn("justify-start", isAIDisabled && "opacity-50 pointer-events-none")}
                             >
                                 <tool.icon className="h-5 w-5" />
                                 <span className="group-data-[collapsible=icon]:hidden">{tool.name}</span>
