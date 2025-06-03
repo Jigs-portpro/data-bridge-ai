@@ -22,6 +22,7 @@ type ModelInfo = {
 const ALL_KNOWN_MODELS: ModelInfo[] = [
   // Google AI
   { id: "gemini-1.5-flash", name: "Gemini 1.5 Flash", provider: "googleai" },
+  { id: "gemini-2.0-flash-exp", name: "Gemini 2.0 Flash Exp.", provider: "googleai" },
   { id: "gemini-1.5-pro", name: "Gemini 1.5 Pro", provider: "googleai" },
   { id: "gemini-1.0-pro", name: "Gemini 1.0 Pro", provider: "googleai" },
   // OpenAI
@@ -266,6 +267,7 @@ export default function AiSettingsPage() {
                             <p>Gemini is a family of multimodal models from Google.</p>
                             <ul className="list-disc pl-5 space-y-1">
                                 <li><strong>Gemini 1.5 Flash:</strong> Optimized for speed, efficiency, and cost. Excellent for high-volume tasks, summarization, chat applications, and when low latency is critical. Supports a large context window.</li>
+                                <li><strong>Gemini 2.0 Flash Exp.:</strong> An experimental, highly efficient model, often used for tasks including image generation (when specified in the flow). Good for quick responses and diverse tasks.</li>
                                 <li><strong>Gemini 1.5 Pro:</strong> A highly capable multimodal model that balances performance with a very large context window (up to 1 million tokens). Excels at long-context reasoning, complex instruction following, coding, and advanced analysis.</li>
                                 <li><strong>Gemini 1.0 Pro:</strong> A well-rounded earlier Pro model, good for a variety of tasks if 1.5 Pro's features aren't strictly needed.</li>
                             </ul>
@@ -305,3 +307,4 @@ export default function AiSettingsPage() {
 }
 
 
+    
