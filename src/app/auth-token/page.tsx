@@ -35,11 +35,10 @@ export default function AuthTokenPage() {
     if (typeof window !== 'undefined') {
       setStoredTokenValue(getApiToken());
     }
-  }, [getApiToken, currentCompanyName]);
+  }, [getApiToken, currentCompanyName]); // currentCompanyName dependency is fine, re-check token if company changes contextually
 
   const extractCompanyName = (response: any): string | null => {
     if (!response) return null;
-    // Prioritize the path from the user's example
     return response.data?.user?.company_name || 
            response.data?.company?.name || 
            response.data?.name || 
@@ -50,6 +49,10 @@ export default function AuthTokenPage() {
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    if (storedTokenValue) { // Prevent submission if token is already active
+        showToast({ title: 'Token Active', description: 'Please clear the current token before obtaining a new one.', variant: 'destructive'});
+        return;
+    }
     setIsFetchingToken(true);
     setAppIsLoading(true);
     setFullApiResponse(null); 
@@ -117,6 +120,7 @@ export default function AuthTokenPage() {
   
   const pageTitleString = "API Authentication Token";
   const isLoading = appIsLoading || isFetchingToken;
+  const isTokenActive = !!storedTokenValue;
 
   return (
     <AppLayout pageTitle={pageTitleString}>
@@ -132,8 +136,12 @@ export default function AuthTokenPage() {
           
           <Card className="w-full max-w-lg mx-auto">
             <CardHeader>
-              <CardTitle>Login to Target API</CardTitle>
-              <CardDescription>Enter your API credentials to get a bearer token.</CardDescription>
+              <CardTitle>{isTokenActive ? "API Token Active" : "Login to Target API"}</CardTitle>
+              <CardDescription>
+                {isTokenActive 
+                  ? "An API token is currently stored. Clear it using the 'Current API Context' section below to obtain a new one." 
+                  : "Enter your API credentials to get a bearer token."}
+              </CardDescription>
             </CardHeader>
             <CardContent>
               <form onSubmit={handleSubmit} className="space-y-6">
@@ -146,7 +154,7 @@ export default function AuthTokenPage() {
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     required
-                    disabled={isLoading}
+                    disabled={isLoading || isTokenActive}
                   />
                 </div>
                 <div className="space-y-2">
@@ -156,12 +164,12 @@ export default function AuthTokenPage() {
                     type="password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    disabled={isLoading}
+                    disabled={isLoading || isTokenActive}
                     placeholder="Enter API password (can be empty)"
                   />
                   <p className="text-xs text-muted-foreground">Leave empty if your API password is an empty string.</p>
                 </div>
-                <Button type="submit" className="w-full" disabled={isLoading}>
+                <Button type="submit" className="w-full" disabled={isLoading || isTokenActive}>
                   {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                   Get/Refresh Token
                 </Button>
