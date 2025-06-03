@@ -9,6 +9,13 @@ import { useRouter, usePathname } from 'next/navigation';
 
 const AUTH_TOKEN_STORAGE_KEY = 'datawiseAuthToken';
 const AUTH_COMPANY_STORAGE_KEY = 'datawiseAuthCompany';
+const AI_PROVIDER_STORAGE_KEY = 'datawiseAiProvider';
+const AI_MODEL_NAME_STORAGE_KEY = 'datawiseAiModelName';
+
+// Define default provider and model (ensure this provider has its key in .env for it to work)
+const DEFAULT_AI_PROVIDER = 'googleai';
+const DEFAULT_AI_MODEL_NAME = 'gemini-1.5-flash';
+
 
 type AppContextType = {
   data: Record<string, any>[];
@@ -27,7 +34,7 @@ type AppContextType = {
   addChatMessage: (message: { role: 'user' | 'assistant'; content: string }) => void;
   clearChatHistory: () => void;
   isAuthenticated: boolean;
-  login: (username: string, pass: string) => boolean; // This is for app login, not API token
+  login: (username: string, pass: string) => boolean;
   logout: () => void;
   isAuthLoading: boolean;
   currentCompanyName: string | null;
@@ -35,11 +42,15 @@ type AppContextType = {
   storeApiToken: (token: string, companyName?: string | null) => void;
   clearApiToken: () => void;
   getApiToken: () => string | null;
+  selectedAiProvider: string | null;
+  setSelectedAiProvider: (provider: string | null) => void;
+  selectedAiModelName: string | null;
+  setSelectedAiModelName: (modelName: string | null) => void;
+  getEnvKeys: () => Record<string, boolean>;
 };
 
 export const AppContext = createContext<AppContextType | undefined>(undefined);
 
-// Hardcoded credentials for app login
 const HARDCODED_USERNAME = "admin";
 const HARDCODED_PASSWORD = "password";
 
@@ -48,39 +59,81 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [columns, setColumnsState] = useState<string[]>([]);
   const [fileName, setFileNameState] = useState<string | null>(null);
   const [activeDialog, setActiveDialog] = useState<string | null>(null);
-  const [isLoadingState, setIsLoadingStateInner] = useState<boolean>(false); // Renamed to avoid conflict
+  const [isLoadingState, setIsLoadingStateInner] = useState<boolean>(false);
   const [chatHistory, setChatHistory] = useState<{ role: 'user' | 'assistant'; content: string }[]>([]);
   const [isAuthenticated, setIsAuthenticatedState] = useState<boolean>(false);
   const [isAuthLoading, setIsAuthLoading] = useState<boolean>(true);
   const [currentCompanyName, setCurrentCompanyNameState] = useState<string | null>(null);
+  const [selectedAiProvider, setSelectedAiProviderState] = useState<string | null>(null);
+  const [selectedAiModelName, setSelectedAiModelNameState] = useState<string | null>(null);
+  const [envKeys, setEnvKeys] = useState<Record<string, boolean>>({});
 
 
   const { toast } = useToast();
   const router = useRouter();
   const pathname = usePathname();
 
+  const fetchEnvKeys = async () => {
+    try {
+      const response = await fetch('/api/env-check'); // You'll need to create this API route
+      if (response.ok) {
+        const keys = await response.json();
+        setEnvKeys(keys);
+        
+        // Initialize AI provider and model from localStorage or defaults
+        const storedProvider = localStorage.getItem(AI_PROVIDER_STORAGE_KEY);
+        const storedModel = localStorage.getItem(AI_MODEL_NAME_STORAGE_KEY);
+
+        if (storedProvider && storedModel && keys[storedProvider.toUpperCase() + '_API_KEY']) {
+          setSelectedAiProviderState(storedProvider);
+          setSelectedAiModelNameState(storedModel);
+        } else if (keys.GOOGLE_API_KEY) { // Default to Google if its key exists and nothing valid stored
+          setSelectedAiProviderState(DEFAULT_AI_PROVIDER);
+          setSelectedAiModelNameState(DEFAULT_AI_MODEL_NAME);
+          localStorage.setItem(AI_PROVIDER_STORAGE_KEY, DEFAULT_AI_PROVIDER);
+          localStorage.setItem(AI_MODEL_NAME_STORAGE_KEY, DEFAULT_AI_MODEL_NAME);
+        } else if (keys.OPENAI_API_KEY) { // Fallback to OpenAI
+            setSelectedAiProviderState('openai');
+            setSelectedAiModelNameState('gpt-4o-mini'); // A common OpenAI default
+            localStorage.setItem(AI_PROVIDER_STORAGE_KEY, 'openai');
+            localStorage.setItem(AI_MODEL_NAME_STORAGE_KEY, 'gpt-4o-mini');
+        } else if (keys.ANTHROPIC_API_KEY) { // Fallback to Anthropic
+            setSelectedAiProviderState('anthropic');
+            setSelectedAiModelNameState('claude-3-haiku-20240307'); // A common Anthropic default
+            localStorage.setItem(AI_PROVIDER_STORAGE_KEY, 'anthropic');
+            localStorage.setItem(AI_MODEL_NAME_STORAGE_KEY, 'claude-3-haiku-20240307');
+        } else {
+            // No API keys found, or stored selection is invalid
+            setSelectedAiProviderState(null);
+            setSelectedAiModelNameState(null);
+        }
+
+      } else {
+        console.error('Failed to fetch env key status');
+         setSelectedAiProviderState(null); // Fallback if API fails
+         setSelectedAiModelNameState(null);
+      }
+    } catch (error) {
+      console.error('Error fetching env key status:', error);
+       setSelectedAiProviderState(null);
+       setSelectedAiModelNameState(null);
+    }
+  };
+
 
   useEffect(() => {
-    // App authentication check (e.g. from localStorage if implemented for app-level auth)
-    // For now, we assume if they reach here, they passed /login or auth is not primary concern yet
-    // This is distinct from API token auth
-    const appAuth = localStorage.getItem('appIsAuthenticated'); // Example for future app auth
+    const appAuth = localStorage.getItem('appIsAuthenticated');
     if (appAuth === 'true') {
       setIsAuthenticatedState(true);
     }
-    setIsAuthLoading(false); // App auth loading done
+    setIsAuthLoading(false);
 
-    // Load API token and company name from local storage
     const storedToken = localStorage.getItem(AUTH_TOKEN_STORAGE_KEY);
     const storedCompany = localStorage.getItem(AUTH_COMPANY_STORAGE_KEY);
-    if (storedToken) {
-      // If there's an API token, we consider the user "authenticated" in the sense of having API access configured
-      // This might be different from app login authentication.
-      // For now, let's keep them linked: if app is authenticated, can configure API.
-    }
     if (storedCompany) {
       setCurrentCompanyNameState(storedCompany);
     }
+    fetchEnvKeys(); // Fetch env keys which then sets AI provider/model
   }, []);
 
 
@@ -138,11 +191,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setChatHistory([]);
   }, []);
 
-  // App Login
   const login = useCallback((username: string, pass: string): boolean => {
     if (username === HARDCODED_USERNAME && pass === HARDCODED_PASSWORD) {
       setIsAuthenticatedState(true);
-      localStorage.setItem('appIsAuthenticated', 'true'); // Example for app auth persistence
+      localStorage.setItem('appIsAuthenticated', 'true');
       router.push('/');
       return true;
     }
@@ -150,20 +202,22 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     return false;
   }, [router, showToast]);
 
-  // App Logout
   const logout = useCallback(() => {
     setIsAuthenticatedState(false);
     localStorage.removeItem('appIsAuthenticated');
-    // Clearing API token on app logout as well for this example
     clearApiToken(); 
     setChatHistory([]);
     setDataState([]);
     setColumnsState([]);
     setFileNameState(null);
+    // Optionally clear AI selection from localStorage on logout
+    // localStorage.removeItem(AI_PROVIDER_STORAGE_KEY);
+    // localStorage.removeItem(AI_MODEL_NAME_STORAGE_KEY);
+    // setSelectedAiProviderState(DEFAULT_AI_PROVIDER); // Or null if no keys
+    // setSelectedAiModelNameState(DEFAULT_AI_MODEL_NAME);
     router.push('/login');
-  }, [router]);
+  }, [router]); // Removed clearApiToken from deps, it's stable
 
-  // API Token and Company Name Management
   const setCurrentCompanyName = useCallback((name: string | null) => {
     setCurrentCompanyNameState(name);
     if (name) {
@@ -178,15 +232,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (companyName) {
       setCurrentCompanyName(companyName);
     } else {
-       // If companyName is not provided but we are storing a token,
-       // we should clear any old company name to avoid staleness.
       setCurrentCompanyName(null);
     }
   }, [setCurrentCompanyName]);
 
   const clearApiToken = useCallback(() => {
     localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
-    setCurrentCompanyName(null); // Also clears company from localStorage
+    setCurrentCompanyName(null);
   }, [setCurrentCompanyName]);
   
   const getApiToken = useCallback(() => {
@@ -195,6 +247,26 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
     return null;
   }, []);
+
+  const setSelectedAiProvider = useCallback((provider: string | null) => {
+    setSelectedAiProviderState(provider);
+    if (provider) {
+      localStorage.setItem(AI_PROVIDER_STORAGE_KEY, provider);
+    } else {
+      localStorage.removeItem(AI_PROVIDER_STORAGE_KEY);
+    }
+  }, []);
+
+  const setSelectedAiModelName = useCallback((modelName: string | null) => {
+    setSelectedAiModelNameState(modelName);
+    if (modelName) {
+      localStorage.setItem(AI_MODEL_NAME_STORAGE_KEY, modelName);
+    } else {
+      localStorage.removeItem(AI_MODEL_NAME_STORAGE_KEY);
+    }
+  }, []);
+  
+  const getEnvKeys = useCallback(() => envKeys, [envKeys]);
 
 
   return (
@@ -209,7 +281,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         activeDialog,
         openDialog,
         closeDialog,
-        isLoading: isLoadingState, // Use renamed state
+        isLoading: isLoadingState,
         setIsLoading,
         showToast,
         chatHistory,
@@ -224,6 +296,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         storeApiToken,
         clearApiToken,
         getApiToken,
+        selectedAiProvider,
+        setSelectedAiProvider,
+        selectedAiModelName,
+        setSelectedAiModelName,
+        getEnvKeys,
       }}
     >
       {children}

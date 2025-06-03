@@ -7,9 +7,11 @@
       "url": "/carrier/addTmsCustomer",
       "fields": [
         {
-          "name": "newField1",
+          "name": "Customer Name",
           "type": "string",
-          "required": true
+          "required": true,
+          "minLength": 6,
+          "maxLength": 50
         },
         {
           "name": "newField2",
@@ -29,7 +31,7 @@
     },
     {
       "id": "new-entity-2-rb970",
-      "name": "New Entity 2",
+      "name": "Cusstomer",
       "url": "/new-endpoint",
       "fields": [
         {

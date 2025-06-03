@@ -15,7 +15,7 @@ import {
   Settings,
   KeyRound,
   Send,
-  DownloadCloud,
+  Cpu, // Added Cpu icon for AI Settings
 } from 'lucide-react';
 import {
   Sidebar,
@@ -81,8 +81,10 @@ export function DataToolsSidebar() {
                     </SidebarMenu>
                 </SidebarGroupContent>
             </SidebarGroup>
+            
             <SidebarSeparator className="my-2" />
-             <SidebarGroup>
+            
+            <SidebarGroup>
                 <SidebarGroupLabel className="group-data-[collapsible=icon]:hidden">Data Export</SidebarGroupLabel>
                  <SidebarGroupContent>
                     <SidebarMenu>
@@ -118,7 +120,9 @@ export function DataToolsSidebar() {
                     </SidebarMenu>
                  </SidebarGroupContent>
             </SidebarGroup>
+            
             <SidebarSeparator className="my-2" />
+            
             <SidebarGroup>
                 <SidebarGroupLabel className="group-data-[collapsible=icon]:hidden">Configuration</SidebarGroupLabel>
                 <SidebarGroupContent>
@@ -131,13 +135,13 @@ export function DataToolsSidebar() {
                             >
                                 <SidebarMenuButton
                                     disabled={!isAuthenticated}
-                                    tooltip={{children: "Setup Entities", side:"right", align:"center"}}
+                                    tooltip={{children: "Target API Setup", side:"right", align:"center"}}
                                     className={cn("justify-start w-full", !isAuthenticated && "opacity-50 pointer-events-none")}
                                     asChild
                                 >
                                    <a>
                                     <Settings className="h-5 w-5" />
-                                    <span className="group-data-[collapsible=icon]:hidden">Setup</span>
+                                    <span className="group-data-[collapsible=icon]:hidden">API Setup</span>
                                    </a>
                                 </SidebarMenuButton>
                             </Link>
@@ -157,6 +161,25 @@ export function DataToolsSidebar() {
                                    <a>
                                     <KeyRound className="h-5 w-5" />
                                     <span className="group-data-[collapsible=icon]:hidden">API Auth</span>
+                                   </a>
+                                </SidebarMenuButton>
+                            </Link>
+                        </SidebarMenuItem>
+                        <SidebarMenuItem>
+                            <Link href="/ai-settings" passHref legacyBehavior
+                                onClick={(e) => { if (!isAuthenticated) e.preventDefault();}}
+                                aria-disabled={!isAuthenticated}
+                                tabIndex={!isAuthenticated ? -1 : undefined}
+                            >
+                                <SidebarMenuButton
+                                    disabled={!isAuthenticated}
+                                    tooltip={{children: "AI Provider Settings", side:"right", align:"center"}}
+                                    className={cn("justify-start w-full", !isAuthenticated && "opacity-50 pointer-events-none")}
+                                    asChild
+                                >
+                                   <a>
+                                    <Cpu className="h-5 w-5" />
+                                    <span className="group-data-[collapsible=icon]:hidden">AI Settings</span>
                                    </a>
                                 </SidebarMenuButton>
                             </Link>
