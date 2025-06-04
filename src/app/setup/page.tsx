@@ -365,7 +365,7 @@ export default function SetupPage() {
         <Separator className="flex-shrink-0 my-2"/>
         
         <ScrollArea className="flex-grow min-h-0 p-6 pt-0">
-          <div className="space-y-6">
+          <div className="space-y-6 w-full">
             {isFetching && !currentEntity && <Loader2 className="mx-auto h-8 w-8 animate-spin text-primary" />}
             {!isFetching && !currentEntity && entities.length > 0 && (
                 <Card className="text-center py-10">
