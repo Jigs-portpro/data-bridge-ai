@@ -76,10 +76,19 @@ export function DataCorrectionDialog() {
       console.error('Error getting data correction suggestions:', error);
       let description = 'Failed to get correction suggestions. Please try again.';
       const errorMessage = String(error?.message || error).toLowerCase();
-      if (errorMessage.includes('503') || errorMessage.includes('service unavailable') || errorMessage.includes('overloaded')) {
-        description = 'The AI service is temporarily unavailable or overloaded. Please try again later.';
+      
+      if (errorMessage.includes('api key') || errorMessage.includes('authentication')) {
+        description = 'Authentication failed. Please check your AI provider API key in the .env file.';
+      } else if (errorMessage.includes('not found') && errorMessage.includes('model')) {
+        description = `The selected AI model ('${selectedAiProvider}/${selectedAiModelName}') was not found by the AI provider. 
+        Troubleshooting steps:
+        1. Verify the model name is correct in AI Settings.
+        2. Ensure your API key (e.g., OPENAI_API_KEY in .env) has access to this specific model.
+        3. If using OpenAI, confirm your key is for OpenAI.com (not an Azure OpenAI key, unless the Genkit plugin is specifically configured for Azure).`;
+      } else if (errorMessage.includes('503') || errorMessage.includes('unavailable') || errorMessage.includes('overloaded') || errorMessage.includes('rate limit')) {
+        description = 'The AI service is temporarily unavailable, overloaded, or you have hit a rate limit. Please try again later.';
       }
-      showToast({ title: 'Suggestion Error', description, variant: 'destructive' });
+      showToast({ title: 'Suggestion Error', description, variant: 'destructive', duration: 12000 });
     } finally {
       setIsProcessing(false);
       setIsAppLoadingGlobal(false);
