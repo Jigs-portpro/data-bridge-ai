@@ -59,15 +59,12 @@ export default function SetupPage() {
       setInitialConfigSnapshot(JSON.stringify({ baseUrl: config.baseUrl || 'https://api.example.com/v1', entities: loadedEntities }));
       
       if (loadedEntities.length > 0) {
-        // Check if the current selectedEntityInternalId is still valid among the loaded entities
         const currentSelectedIsValid = selectedEntityInternalId && loadedEntities.some(e => e.internalId === selectedEntityInternalId);
         if (!currentSelectedIsValid) {
-            // If not valid (e.g., it was deleted or this is the initial load), select the first one
             setSelectedEntityInternalId(loadedEntities[0].internalId);
         }
-        // If it is valid, retain the current selection.
       } else {
-        setSelectedEntityInternalId(null); // No entities, so no selection
+        setSelectedEntityInternalId(null); 
       }
 
     } catch (error) {
@@ -81,7 +78,7 @@ export default function SetupPage() {
     } finally {
       setIsFetching(false);
     }
-  }, [showToast]); // Removed selectedEntityInternalId from here
+  }, [showToast]); 
 
   useEffect(() => {
     if (isAuthLoading === false && isAuthenticated === false) {
@@ -320,7 +317,7 @@ export default function SetupPage() {
             </Card>
           </div>
           
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4 items-end">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4 items-start">
             <div>
               <Label htmlFor="baseUrl" className="text-sm font-medium">Base API URL</Label>
               <Input
@@ -353,7 +350,7 @@ export default function SetupPage() {
                 </Select>
                 {entities.length > 0 && !selectedEntityInternalId && !isFetching && (
                   <p key="select-prompt-key" className="text-xs text-muted-foreground mt-1">
-                    Please select an entity to edit from the dropdown.
+                    Please select the entity to edit.
                   </p>
                 )}
                  {entities.length === 0 && !isFetching && (
