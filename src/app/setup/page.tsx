@@ -59,12 +59,15 @@ export default function SetupPage() {
       setInitialConfigSnapshot(JSON.stringify({ baseUrl: config.baseUrl || 'https://api.example.com/v1', entities: loadedEntities }));
       
       if (loadedEntities.length > 0) {
+        // Check if the current selectedEntityInternalId is still valid among the loaded entities
         const currentSelectedIsValid = selectedEntityInternalId && loadedEntities.some(e => e.internalId === selectedEntityInternalId);
         if (!currentSelectedIsValid) {
+            // If not valid (e.g., it was deleted or this is the initial load), select the first one
             setSelectedEntityInternalId(loadedEntities[0].internalId);
         }
+        // If it is valid, retain the current selection.
       } else {
-        setSelectedEntityInternalId(null);
+        setSelectedEntityInternalId(null); // No entities, so no selection
       }
 
     } catch (error) {
@@ -78,7 +81,7 @@ export default function SetupPage() {
     } finally {
       setIsFetching(false);
     }
-  }, [showToast, selectedEntityInternalId]); 
+  }, [showToast]); // Removed selectedEntityInternalId from here
 
   useEffect(() => {
     if (isAuthLoading === false && isAuthenticated === false) {
@@ -349,12 +352,12 @@ export default function SetupPage() {
                     </SelectContent>
                 </Select>
                 {entities.length > 0 && !selectedEntityInternalId && !isFetching && (
-                  <p key="select-prompt" className="text-xs text-muted-foreground mt-1">
+                  <p key="select-prompt-key" className="text-xs text-muted-foreground mt-1">
                     Please select an entity to edit from the dropdown.
                   </p>
                 )}
                  {entities.length === 0 && !isFetching && (
-                  <p key="no-entities-prompt" className="text-xs text-muted-foreground mt-1">
+                  <p key="no-entities-prompt-key" className="text-xs text-muted-foreground mt-1">
                     No entities are configured yet. Click "Add New Entity" to start.
                   </p>
                 )}
