@@ -21,7 +21,8 @@ const ProcessAddressPromptInputSchema = z.object({
 });
 
 // Schema for the output from the AI
-export const ProcessAddressOutputSchema = z.object({
+// NOT EXPORTED: Defined for internal use by ai.definePrompt and for deriving ProcessAddressOutput type.
+const ProcessAddressOutputSchema = z.object({
   cleanedStreetAddress: z.string().nullable().describe('The cleaned and standardized street address. Null if not determinable.'),
   cleanedCity: z.string().nullable().describe('The cleaned and standardized city. Null if not determinable.'),
   cleanedState: z.string().nullable().describe('The cleaned and standardized state/province. Null if not determinable.'),
@@ -36,7 +37,8 @@ export const ProcessAddressOutputSchema = z.object({
 export type ProcessAddressOutput = z.infer<typeof ProcessAddressOutputSchema>;
 
 // Schema for the input received by the exported server action from the client
-export const ProcessAddressClientInputSchema = ProcessAddressPromptInputSchema.extend({
+// NOT EXPORTED: Defined for internal use and for deriving ProcessAddressClientInput type.
+const ProcessAddressClientInputSchema = ProcessAddressPromptInputSchema.extend({
   aiProvider: z.string().describe("The AI provider ID (e.g., 'googleai', 'openai')."),
   aiModelName: z.string().describe("The specific model name (e.g., 'gemini-1.5-flash', 'gpt-4o-mini').")
 });
