@@ -14,7 +14,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 
 type ModelInfo = {
-  id: string; // This is the model_id part, e.g., "gpt-4o" or "claude-3-opus-20240229"
+  id: string; // This is the model_id part, e.g., "gpt4o" or "claude-3-opus-20240229"
   name: string; // User-friendly display name
   provider: 'googleai' | 'openai' | 'anthropic'; // This corresponds to the provider part, e.g., "openai"
 };
@@ -22,16 +22,16 @@ type ModelInfo = {
 const ALL_KNOWN_MODELS: ModelInfo[] = [
   // Google AI (Keep these as they are for the googleAI() plugin)
   { id: "gemini-1.5-flash", name: "Gemini 1.5 Flash", provider: "googleai" },
-  { id: "gemini-2.0-flash-exp", name: "Gemini 2.0 Flash Exp.", provider: "googleai" },
+  { id: "gemini-2.0-flash-exp", name: "Gemini 2.0 Flash Exp.", provider: "googleai" }, // Primarily for images but can be used for text
   { id: "gemini-1.5-pro", name: "Gemini 1.5 Pro", provider: "googleai" },
   { id: "gemini-1.0-pro", name: "Gemini 1.0 Pro", provider: "googleai" },
   
-  // OpenAI (for genkitx-openai plugin)
-  { id: "gpt-4o", name: "GPT-4o", provider: "openai" },
-  { id: "gpt-4o-mini", name: "GPT-4o mini", provider: "openai" },
-  { id: "gpt-4-turbo", name: "GPT-4 Turbo", provider: "openai" },
-  { id: "gpt-4", name: "GPT-4", provider: "openai" },
-  { id: "gpt-3.5-turbo", name: "GPT-3.5 Turbo", provider: "openai" },
+  // OpenAI (for genkitx-openai plugin - IDs updated based on user feedback)
+  { id: "gpt4o", name: "GPT-4o", provider: "openai" },
+  { id: "gpt4oMini", name: "GPT-4o mini", provider: "openai" },
+  { id: "gpt4Turbo", name: "GPT-4 Turbo", provider: "openai" },
+  { id: "gpt4", name: "GPT-4", provider: "openai" },
+  { id: "gpt35Turbo", name: "GPT-3.5 Turbo", provider: "openai" },
 
   // Anthropic (for genkitx-anthropic plugin)
   { id: "claude-3-5-sonnet-20240620", name: "Claude 3.5 Sonnet", provider: "anthropic" },
@@ -295,12 +295,13 @@ export default function AiSettingsPage() {
                         <AccordionContent className="text-sm space-y-2">
                             <p>GPT (Generative Pre-trained Transformer) models from OpenAI are known for their strong language understanding and generation capabilities. These models are typically accessed via the `genkitx-openai` plugin.</p>
                             <ul className="list-disc pl-5 space-y-1">
-                                <li><strong>GPT-4o:</strong> OpenAI's flagship multimodal model, designed for speed, cost-effectiveness, and strong capabilities in text, vision, and audio.</li>
-                                <li><strong>GPT-4o mini:</strong> A smaller, faster, and more affordable version of GPT-4o, providing strong intelligence for applications where speed and cost are critical.</li>
-                                <li><strong>GPT-4 Turbo:</strong> Advanced reasoning, creativity, and instruction following. Supports a large context window (often refers to models like `gpt-4-turbo-2024-04-09`).</li>
-                                <li><strong>GPT-4:</strong> The base GPT-4 model, known for its powerful general capabilities.</li>
-                                <li><strong>GPT-3.5 Turbo:</strong> Fast and affordable, a workhorse for many general-purpose tasks, chatbots, and content generation (e.g., `gpt-3.5-turbo-0125`).</li>
+                                <li><strong>GPT-4o (`gpt4o`):</strong> OpenAI's flagship multimodal model, designed for speed, cost-effectiveness, and strong capabilities in text, vision, and audio.</li>
+                                <li><strong>GPT-4o mini (`gpt4oMini`):</strong> A smaller, faster, and more affordable version of GPT-4o, providing strong intelligence for applications where speed and cost are critical.</li>
+                                <li><strong>GPT-4 Turbo (`gpt4Turbo`):</strong> Advanced reasoning, creativity, and instruction following. Supports a large context window (often refers to models like `gpt-4-turbo-2024-04-09`).</li>
+                                <li><strong>GPT-4 (`gpt4`):</strong> The base GPT-4 model, known for its powerful general capabilities.</li>
+                                <li><strong>GPT-3.5 Turbo (`gpt35Turbo`):</strong> Fast and affordable, a workhorse for many general-purpose tasks, chatbots, and content generation (e.g., `gpt-3.5-turbo-0125`).</li>
                             </ul>
+                             <p className="text-xs">Note: Model IDs like `gpt4oMini` (without hyphens) are used internally by the plugin.</p>
                         </AccordionContent>
                     </AccordionItem>
                     <AccordionItem value="anthropic-claude">
