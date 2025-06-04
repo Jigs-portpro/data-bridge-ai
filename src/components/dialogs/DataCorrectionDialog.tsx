@@ -20,11 +20,11 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useAppContext } from '@/hooks/useAppContext';
-import { suggestDataCorrections, type SuggestDataCorrectionsOutput } from '@/ai/flows/data-correction-suggestions';
+import { suggestDataCorrections, type SuggestDataCorrectionsOutput, type SuggestDataCorrectionsClientInput } from '@/ai/flows/data-correction-suggestions';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Wand2 } from 'lucide-react';
+import { Wand2, Loader2 } from 'lucide-react';
 
 export function DataCorrectionDialog() {
   const {
@@ -34,11 +34,14 @@ export function DataCorrectionDialog() {
     activeDialog,
     closeDialog,
     showToast,
-    isLoading,
-    setIsLoading,
+    isLoading: isAppLoadingGlobal, // Renamed to avoid conflict
+    setIsLoading: setIsAppLoadingGlobal, // Renamed to avoid conflict
+    selectedAiProvider,
+    selectedAiModelName,
   } = useAppContext();
   const [selectedColumn, setSelectedColumn] = useState<string>('');
   const [suggestions, setSuggestions] = useState<SuggestDataCorrectionsOutput | null>(null);
+  const [isProcessing, setIsProcessing] = useState(false); // Local loading state
 
   useEffect(() => {
     if (columns.length > 0 && activeDialog === 'correction') {
@@ -52,29 +55,41 @@ export function DataCorrectionDialog() {
       showToast({ title: 'Select a column', description: 'Please select a column to get suggestions.', variant: 'destructive' });
       return;
     }
-    setIsLoading(true);
+    if (!selectedAiProvider || !selectedAiModelName) {
+      showToast({ title: 'AI Not Configured', description: 'Please select an AI provider and model in AI Settings.', variant: 'destructive'});
+      return;
+    }
+    setIsProcessing(true);
+    setIsAppLoadingGlobal(true);
     setSuggestions(null);
     try {
       const columnData = data.map(row => String(row[selectedColumn] ?? ''));
-      const result = await suggestDataCorrections({ columnName: selectedColumn, data: columnData });
+      const input: SuggestDataCorrectionsClientInput = {
+        columnName: selectedColumn,
+        data: columnData,
+        aiProvider: selectedAiProvider,
+        aiModelName: selectedAiModelName,
+      };
+      const result = await suggestDataCorrections(input);
       setSuggestions(result);
     } catch (error: any) {
       console.error('Error getting data correction suggestions:', error);
       let description = 'Failed to get correction suggestions. Please try again.';
-      // Check if the error message indicates a service availability issue
       const errorMessage = String(error?.message || error).toLowerCase();
       if (errorMessage.includes('503') || errorMessage.includes('service unavailable') || errorMessage.includes('overloaded')) {
         description = 'The AI service is temporarily unavailable or overloaded. Please try again later.';
       }
       showToast({ title: 'Suggestion Error', description, variant: 'destructive' });
     } finally {
-      setIsLoading(false);
+      setIsProcessing(false);
+      setIsAppLoadingGlobal(false);
     }
   };
 
   const handleApplyCorrections = () => {
     if (!suggestions || !selectedColumn) return;
-    setIsLoading(true);
+    setIsProcessing(true); // Can use the same loading state or a different one if needed
+    setIsAppLoadingGlobal(true);
     try {
       const newData = data.map((row, index) => ({
         ...row,
@@ -87,9 +102,12 @@ export function DataCorrectionDialog() {
       console.error('Error applying corrections:', error);
       showToast({ title: 'Error', description: 'Failed to apply corrections.', variant: 'destructive' });
     } finally {
-      setIsLoading(false);
+      setIsProcessing(false);
+      setIsAppLoadingGlobal(false);
     }
   };
+
+  const isLoading = isAppLoadingGlobal || isProcessing;
 
   return (
     <Dialog open={activeDialog === 'correction'} onOpenChange={(isOpen) => { if (!isOpen) closeDialog(); }}>
@@ -97,7 +115,7 @@ export function DataCorrectionDialog() {
         <DialogHeader>
           <DialogTitle className="font-headline flex items-center"><Wand2 className="mr-2 h-5 w-5 text-primary" />Data Correction Suggestions</DialogTitle>
           <DialogDescription>
-            Select a column to get AI-powered suggestions for casing, formatting, and other corrections.
+            Select a column to get AI-powered suggestions for casing, formatting, and other corrections. Ensure AI Provider & Model are set in AI Settings.
           </DialogDescription>
         </DialogHeader>
         
@@ -119,8 +137,12 @@ export function DataCorrectionDialog() {
               </SelectContent>
             </Select>
           </div>
-          <Button onClick={handleSuggestCorrections} disabled={isLoading || !selectedColumn}>
-            {isLoading ? 'Getting Suggestions...' : 'Get Suggestions'}
+          <Button 
+            onClick={handleSuggestCorrections} 
+            disabled={isLoading || !selectedColumn || (!selectedAiProvider || !selectedAiModelName)}
+          >
+            {isLoading && isProcessing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+            {isLoading && isProcessing ? 'Getting Suggestions...' : 'Get Suggestions'}
           </Button>
         </div>
 
@@ -168,3 +190,4 @@ export function DataCorrectionDialog() {
     </Dialog>
   );
 }
+
