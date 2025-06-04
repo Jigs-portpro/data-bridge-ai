@@ -81,16 +81,20 @@ const suggestDataCorrectionsFlow = ai.defineFlow(
     const { aiProvider, aiModelName, ...promptData } = clientInput;
     const modelIdentifier = `${aiProvider}/${aiModelName}`;
     
+    console.log('[data-correction-suggestions] Attempting to use model:', modelIdentifier); // Added for debugging
     const {output} = await prompt(promptData, { model: modelIdentifier });
     if (!output) {
       throw new Error("AI did not return an output for data correction suggestions.");
     }
-    // Additional server-side check (optional, but good for defense)
+    // Additional server-side check
     if (output.correctedData.length !== promptData.data.length) {
-        console.warn(`Data correction AI returned ${output.correctedData.length} items, but input had ${promptData.data.length} items. This might cause client-side issues.`);
+        console.error(`CRITICAL: Data correction AI returned ${output.correctedData.length} items, but input had ${promptData.data.length} items. This indicates a serious AI response error. Output was:`, output);
         // Depending on strictness, you could throw an error here or try to pad/truncate,
         // but it's better handled by the client seeing the discrepancy.
+        // For now, we'll let it pass but the client-side check should catch this before applying.
+        // throw new Error(`AI response length mismatch: expected ${promptData.data.length}, got ${output.correctedData.length}.`);
     }
     return output;
   }
 );
+
