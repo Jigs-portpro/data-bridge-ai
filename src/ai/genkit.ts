@@ -27,7 +27,7 @@ if (openAIKey) {
   console.log("OPENAI_API_KEY found in environment. Attempting to load OpenAI plugin (genkitx-openai)...");
   try {
     const { openAI } = await import('genkitx-openai'); 
-    plugins.push(openAI()); 
+    plugins.push(openAI({apiKey: openAIKey})); // Pass API key explicitly
     console.log("OpenAI plugin (genkitx-openai) loaded successfully.");
   } catch (e) {
     console.warn("Failed to import or initialize OpenAI plugin (genkitx-openai). OPENAI_API_KEY was found, but the plugin couldn't load. Error:", e);
@@ -42,7 +42,7 @@ if (anthropicKey) {
   console.log("ANTHROPIC_API_KEY found in environment. Attempting to load Anthropic plugin (genkitx-anthropic)...");
   try {
     const { anthropic } = await import('genkitx-anthropic');
-    plugins.push(anthropic());
+    plugins.push(anthropic({apiKey: anthropicKey})); // Pass API key explicitly
     console.log("Anthropic plugin (genkitx-anthropic) loaded successfully.");
   } catch (e) {
     console.warn("Failed to import or initialize Anthropic plugin (genkitx-anthropic). ANTHROPIC_API_KEY was found, but the plugin couldn't load. Error:", e);
@@ -68,3 +68,4 @@ export const ai = genkit({
 // This file no longer exports currentAiProvider or currentAiModelIdentifier,
 // as that will be managed by AppContext and localStorage.
 // Individual AI flow calls will specify the model dynamically.
+
