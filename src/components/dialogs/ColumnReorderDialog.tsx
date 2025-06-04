@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState } from 'react';
@@ -11,72 +12,81 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { useAppContext } from '@/hooks/useAppContext';
-import { intelligentColumnReordering, type IntelligentColumnReorderingOutput } from '@/ai/flows/intelligent-column-reordering';
+import { intelligentColumnReordering, type IntelligentColumnReorderingOutput, type IntelligentColumnReorderingClientInput } from '@/ai/flows/intelligent-column-reordering';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Shuffle, CheckCircle } from 'lucide-react';
+import { Shuffle, CheckCircle, Loader2 } from 'lucide-react';
 
 export function ColumnReorderDialog() {
   const {
     data,
     columns,
-    setColumns, // We need to update columns in context
-    setData, // And re-map data if necessary to reflect new column order
+    setColumns, 
+    setData, 
     activeDialog,
     closeDialog,
     showToast,
-    isLoading,
-    setIsLoading,
+    isLoading: isAppLoadingGlobal, 
+    setIsLoading: setIsAppLoadingGlobal, 
+    selectedAiProvider,
+    selectedAiModelName,
   } = useAppContext();
   const [reorderResult, setReorderResult] = useState<IntelligentColumnReorderingOutput | null>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
 
   const handleReorderColumns = async () => {
-    setIsLoading(true);
+    if (!selectedAiProvider || !selectedAiModelName) {
+      showToast({ title: 'AI Not Configured', description: 'Please select an AI provider and model in AI Settings.', variant: 'destructive'});
+      return;
+    }
+    setIsProcessing(true);
+    setIsAppLoadingGlobal(true);
     setReorderResult(null);
     try {
-      // Use a sample of data for the AI, e.g., first 5 rows or up to 1000 cells
       const sampleData = data.slice(0, 5); 
-      const result = await intelligentColumnReordering({ columnNames: columns, sampleData });
+      const input: IntelligentColumnReorderingClientInput = {
+        columnNames: columns,
+        sampleData,
+        aiProvider: selectedAiProvider,
+        aiModelName: selectedAiModelName,
+      };
+      const result = await intelligentColumnReordering(input);
       setReorderResult(result);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error reordering columns:', error);
-      showToast({ title: 'Error', description: 'Failed to reorder columns.', variant: 'destructive' });
+      let description = 'Failed to reorder columns. Please try again.';
+      const errorMessage = String(error?.message || error).toLowerCase();
+      if (errorMessage.includes('api key') || errorMessage.includes('authentication')) {
+        description = 'Authentication failed with the AI provider. Check your API key.';
+      } else if (errorMessage.includes('model not found')) {
+        description = `The AI model ('${selectedAiProvider}/${selectedAiModelName}') was not found. Check AI Settings and key permissions.`;
+      } else if (errorMessage.includes('503') || errorMessage.includes('unavailable') || errorMessage.includes('overloaded')) {
+        description = 'The AI service is temporarily unavailable or overloaded. Please try again later.';
+      }
+      showToast({ title: 'Reorder Error', description, variant: 'destructive', duration: 9000 });
     } finally {
-      setIsLoading(false);
+      setIsProcessing(false);
+      setIsAppLoadingGlobal(false);
     }
   };
 
   const applyReordering = () => {
     if (!reorderResult) return;
-    setIsLoading(true);
+    setIsProcessing(true); 
+    setIsAppLoadingGlobal(true);
     try {
       const newColumns = reorderResult.reorderedColumnNames;
-      // Update columns in context
       setColumns(newColumns);
-
-      // Re-map data to ensure it aligns with the new column order if needed.
-      // However, if DataTable component simply iterates over `columns` from context
-      // to pick properties from `data` objects, re-mapping `data` objects might not be strictly necessary
-      // as long as the `data` objects still contain all original keys.
-      // For safety and explicitness, one might re-create data objects:
-      // const reorderedData = data.map(row => {
-      //   const newRow: Record<string, any> = {};
-      //   newColumns.forEach(col => newRow[col] = row[col]);
-      //   return newRow;
-      // });
-      // setData(reorderedData); 
-      // For now, assuming DataTable is flexible enough, just updating columns.
-      // If issues arise, uncomment and test data re-mapping.
-
       showToast({ title: 'Columns Reordered', description: 'Columns have been intelligently reordered.' });
-      // closeDialog(); // Optionally close
     } catch (error) {
         console.error('Error applying column reorder:', error);
         showToast({ title: 'Apply Error', description: 'Failed to apply new column order.', variant: 'destructive' });
     } finally {
-        setIsLoading(false);
+        setIsProcessing(false);
+        setIsAppLoadingGlobal(false);
     }
   };
 
+  const isLoading = isAppLoadingGlobal || isProcessing;
 
   return (
     <Dialog open={activeDialog === 'reorder'} onOpenChange={(isOpen) => !isOpen && closeDialog()}>
@@ -84,13 +94,18 @@ export function ColumnReorderDialog() {
         <DialogHeader>
           <DialogTitle className="font-headline flex items-center"><Shuffle className="mr-2 h-5 w-5 text-primary"/>Intelligent Column Reordering</DialogTitle>
           <DialogDescription>
-            Let AI analyze your column titles and content to suggest a more logical sequence.
+            Let AI analyze your column titles and content to suggest a more logical sequence. Ensure AI Provider & Model are set in AI Settings.
           </DialogDescription>
         </DialogHeader>
         
         <div className="py-4">
           {!reorderResult && (
-            <Button onClick={handleReorderColumns} disabled={isLoading} className="w-full">
+            <Button 
+              onClick={handleReorderColumns} 
+              disabled={isLoading || (!selectedAiProvider || !selectedAiModelName)} 
+              className="w-full"
+            >
+              {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : null}
               {isLoading ? 'Analyzing...' : 'Suggest Column Order'}
             </Button>
           )}
@@ -111,7 +126,13 @@ export function ColumnReorderDialog() {
             <Button onClick={applyReordering} disabled={isLoading} className="w-full">
               <CheckCircle className="mr-2 h-4 w-4" /> Apply This Order
             </Button>
-             <Button onClick={handleReorderColumns} disabled={isLoading} variant="outline" className="w-full">
+             <Button 
+                onClick={handleReorderColumns} 
+                disabled={isLoading || (!selectedAiProvider || !selectedAiModelName)} 
+                variant="outline" 
+                className="w-full"
+              >
+              {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : null}
               Re-analyze
             </Button>
           </div>
