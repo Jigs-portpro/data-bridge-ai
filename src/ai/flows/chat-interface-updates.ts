@@ -1,17 +1,19 @@
+
 'use server';
 
 /**
  * @fileOverview A chat interface to discuss data and make updates.
  *
  * - chatInterfaceUpdates - A function that handles the chat interface and data update process.
- * - ChatInterfaceUpdatesInput - The input type for the chatInterfaceUpdates function.
+ * - ChatInterfaceUpdatesClientInput - The client-facing input type for the chatInterfaceUpdates function.
  * - ChatInterfaceUpdatesOutput - The return type for the chatInterfaceUpdates function.
  */
 
 import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
 
-const ChatInterfaceUpdatesInputSchema = z.object({
+// Schema for the data required by the AI prompt
+const ChatInterfaceUpdatesPromptInputSchema = z.object({
   dataContext: z
     .string()
     .describe(
@@ -19,7 +21,14 @@ const ChatInterfaceUpdatesInputSchema = z.object({
     ),
   userQuery: z.string().describe('The user query related to the data.'),
 });
-export type ChatInterfaceUpdatesInput = z.infer<typeof ChatInterfaceUpdatesInputSchema>;
+
+// Schema for the input received by the exported server action from the client
+const ChatInterfaceUpdatesClientInputSchema = ChatInterfaceUpdatesPromptInputSchema.extend({
+  aiProvider: z.string().describe("The AI provider ID (e.g., 'googleai', 'openai')."),
+  aiModelName: z.string().describe("The specific model name (e.g., 'gemini-1.5-flash', 'gpt-4o-mini').")
+});
+export type ChatInterfaceUpdatesClientInput = z.infer<typeof ChatInterfaceUpdatesClientInputSchema>;
+
 
 const ChatInterfaceUpdatesOutputSchema = z.object({
   response: z.string().describe('The response to the user query based on the data.'),
@@ -30,14 +39,14 @@ const ChatInterfaceUpdatesOutputSchema = z.object({
 export type ChatInterfaceUpdatesOutput = z.infer<typeof ChatInterfaceUpdatesOutputSchema>;
 
 export async function chatInterfaceUpdates(
-  input: ChatInterfaceUpdatesInput
+  input: ChatInterfaceUpdatesClientInput
 ): Promise<ChatInterfaceUpdatesOutput> {
   return chatInterfaceUpdatesFlow(input);
 }
 
 const prompt = ai.definePrompt({
   name: 'chatInterfaceUpdatesPrompt',
-  input: {schema: ChatInterfaceUpdatesInputSchema},
+  input: {schema: ChatInterfaceUpdatesPromptInputSchema},
   output: {schema: ChatInterfaceUpdatesOutputSchema},
   prompt: `You are an AI assistant helping users to discuss and update their data through a chat interface.
 
@@ -57,11 +66,17 @@ const prompt = ai.definePrompt({
 const chatInterfaceUpdatesFlow = ai.defineFlow(
   {
     name: 'chatInterfaceUpdatesFlow',
-    inputSchema: ChatInterfaceUpdatesInputSchema,
+    inputSchema: ChatInterfaceUpdatesClientInputSchema,
     outputSchema: ChatInterfaceUpdatesOutputSchema,
   },
-  async input => {
-    const {output} = await prompt(input);
+  async (clientInput) => {
+    const { aiProvider, aiModelName, ...promptData } = clientInput;
+    const modelIdentifier = `${aiProvider}/${aiModelName}`;
+
+    const {output} = await prompt(promptData, { model: modelIdentifier });
+    if (!output) {
+      throw new Error("AI did not return an output for chat interface updates.");
+    }
     return output!;
   }
 );

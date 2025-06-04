@@ -4,7 +4,7 @@
  * @fileOverview An AI agent for automatically mapping source columns to target entity fields.
  *
  * - autoColumnMapping - A function that handles the column auto-mapping process.
- * - AutoColumnMappingInput - The input type for the autoColumnMapping function.
+ * - AutoColumnMappingClientInput - The client-facing input type for the autoColumnMapping function.
  * - AutoColumnMappingOutput - The return type for the autoColumnMapping function.
  */
 
@@ -16,11 +16,19 @@ const TargetFieldSchema = z.object({
   type: z.string().optional().describe('The data type of the target field (e.g., string, number, date).'),
 });
 
-const AutoColumnMappingInputSchema = z.object({
+// Schema for the data required by the AI prompt
+const AutoColumnMappingPromptInputSchema = z.object({
   sourceColumnNames: z.array(z.string()).describe('An array of source column names from the uploaded data.'),
   targetFields: z.array(TargetFieldSchema).describe('An array of target entity fields, each with a name and optional type.'),
 });
-export type AutoColumnMappingInput = z.infer<typeof AutoColumnMappingInputSchema>;
+
+// Schema for the input received by the exported server action from the client
+const AutoColumnMappingClientInputSchema = AutoColumnMappingPromptInputSchema.extend({
+  aiProvider: z.string().describe("The AI provider ID (e.g., 'googleai', 'openai')."),
+  aiModelName: z.string().describe("The specific model name (e.g., 'gemini-1.5-flash', 'gpt-4o-mini').")
+});
+export type AutoColumnMappingClientInput = z.infer<typeof AutoColumnMappingClientInputSchema>;
+
 
 const MappingSuggestionSchema = z.object({
   targetFieldName: z.string().describe('The name of the target entity field.'),
@@ -36,13 +44,13 @@ const AutoColumnMappingOutputSchema = z.object({
 });
 export type AutoColumnMappingOutput = z.infer<typeof AutoColumnMappingOutputSchema>;
 
-export async function autoColumnMapping(input: AutoColumnMappingInput): Promise<AutoColumnMappingOutput> {
+export async function autoColumnMapping(input: AutoColumnMappingClientInput): Promise<AutoColumnMappingOutput> {
   return autoColumnMappingFlow(input);
 }
 
 const prompt = ai.definePrompt({
   name: 'autoColumnMappingPrompt',
-  input: {schema: AutoColumnMappingInputSchema},
+  input: {schema: AutoColumnMappingPromptInputSchema},
   output: {schema: AutoColumnMappingOutputSchema},
   prompt: `You are an expert data integration assistant. Your task is to automatically map source data columns to target API entity fields.
 You will be given a list of source column names and a list of target entity fields (with their names and types).
@@ -74,13 +82,19 @@ Ensure every target field from the input is present in your output mappings arra
 const autoColumnMappingFlow = ai.defineFlow(
   {
     name: 'autoColumnMappingFlow',
-    inputSchema: AutoColumnMappingInputSchema,
+    inputSchema: AutoColumnMappingClientInputSchema,
     outputSchema: AutoColumnMappingOutputSchema,
   },
-  async input => {
-    const {output} = await prompt(input);
+  async (clientInput) => {
+    const { aiProvider, aiModelName, ...promptData } = clientInput;
+    const modelIdentifier = `${aiProvider}/${aiModelName}`;
+    
+    const {output} = await prompt(promptData, { model: modelIdentifier });
+    if (!output) {
+      throw new Error("AI did not return an output for auto column mapping.");
+    }
     // Ensure all target fields are present in the output, even if AI missed some
-    const allTargetFieldNames = input.targetFields.map(tf => tf.name);
+    const allTargetFieldNames = promptData.targetFields.map(tf => tf.name);
     const mappedTargetFieldNames = new Set(output!.mappings.map(m => m.targetFieldName));
 
     for (const targetFieldName of allTargetFieldNames) {

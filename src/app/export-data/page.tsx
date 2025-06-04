@@ -23,7 +23,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { isValid, parseISO } from 'date-fns';
 import Link from 'next/link';
 import { Separator } from '@/components/ui/separator';
-import { autoColumnMapping, type MappingSuggestion } from '@/ai/flows/auto-column-mapping';
+import { autoColumnMapping, type MappingSuggestion, type AutoColumnMappingClientInput } from '@/ai/flows/auto-column-mapping';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 
@@ -462,12 +462,14 @@ export default function ExportDataPage() {
       setAppContextIsLoading(true);
       try {
         const targetFieldsForAI = selectedEntityConfig.fields.map(f => ({ name: f.name, type: f.type || 'string' }));
-        const result = await autoColumnMapping({ 
+        const input: AutoColumnMappingClientInput = {
             sourceColumnNames: appColumns, 
             targetFields: targetFieldsForAI,
-            // aiProvider: selectedAiProvider, // This flow needs to be updated to accept these
-            // aiModelName: selectedAiModelName,
-        });
+            aiProvider: selectedAiProvider,
+            aiModelName: selectedAiModelName,
+        };
+        
+        const result = await autoColumnMapping(input);
         
         const newMappings: Record<string, string> = { }; 
         const newConfidences: Record<string, { score: number; reasoning: string } | null> = {};
@@ -485,12 +487,16 @@ export default function ExportDataPage() {
         showToast({ title: "Auto-mapping Complete", description: "Review the AI-suggested mappings." });
       } catch (error: any) {
         console.error("Error auto-mapping columns:", error);
-        const errorMessage = error?.message?.toLowerCase();
-        let desc = "Could not generate AI column mappings.";
-        if (errorMessage?.includes('503') || errorMessage?.includes('unavailable') || errorMessage?.includes('overloaded')) {
+        let desc = "Could not generate AI column mappings. Please try again.";
+        const errorMessage = String(error?.message || error).toLowerCase();
+        if (errorMessage.includes('api key') || errorMessage.includes('authentication')) {
+            desc = "Authentication failed with the AI provider. Check your API key.";
+        } else if (errorMessage.includes('model not found')) {
+            desc = `The AI model ('${selectedAiProvider}/${selectedAiModelName}') was not found. Check AI Settings and key permissions.`;
+        } else if (errorMessage.includes('503') || errorMessage.includes('unavailable') || errorMessage.includes('overloaded')) {
             desc = "AI service for auto-mapping is currently overloaded or unavailable. Please try again later.";
         }
-        showToast({ title: "Auto-map Error", description: desc, variant: "destructive" });
+        showToast({ title: "Auto-map Error", description: desc, variant: "destructive", duration: 9000 });
       } finally {
         setIsAutoMapping(false);
         setAppContextIsLoading(false);

@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect } from 'react';
@@ -13,10 +14,10 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useAppContext } from '@/hooks/useAppContext';
-import { detectDuplicates, type DuplicateDetectionOutput } from '@/ai/flows/duplicate-detection';
+import { detectDuplicates, type DuplicateDetectionOutput, type DuplicateDetectionClientInput } from '@/ai/flows/duplicate-detection';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { CopyCheck, ListChecks } from 'lucide-react';
+import { CopyCheck, ListChecks, Loader2 } from 'lucide-react';
 
 export function DuplicateDetectionDialog() {
   const {
@@ -25,16 +26,19 @@ export function DuplicateDetectionDialog() {
     activeDialog,
     closeDialog,
     showToast,
-    isLoading,
-    setIsLoading,
+    isLoading: isAppLoadingGlobal,
+    setIsLoading: setIsAppLoadingGlobal,
+    selectedAiProvider,
+    selectedAiModelName,
   } = useAppContext();
   const [selectedColumnsForDuplicates, setSelectedColumnsForDuplicates] = useState<string[]>([]);
   const [duplicatesResult, setDuplicatesResult] = useState<DuplicateDetectionOutput | null>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
 
   useEffect(() => {
-    // Pre-select all columns by default when dialog opens or columns change
     if (activeDialog === 'duplicate') {
       setSelectedColumnsForDuplicates(columns);
+      setDuplicatesResult(null);
     }
   }, [columns, activeDialog]);
 
@@ -51,24 +55,46 @@ export function DuplicateDetectionDialog() {
       showToast({ title: 'Select Columns', description: 'Please select at least one column to check for duplicates.', variant: 'destructive' });
       return;
     }
-    setIsLoading(true);
+    if (!selectedAiProvider || !selectedAiModelName) {
+      showToast({ title: 'AI Not Configured', description: 'Please select an AI provider and model in AI Settings.', variant: 'destructive'});
+      return;
+    }
+    setIsProcessing(true);
+    setIsAppLoadingGlobal(true);
     setDuplicatesResult(null);
     try {
-      // The AI flow expects `data` as an array of objects, which `appContext.data` already is.
-      const result = await detectDuplicates({ data, columns: selectedColumnsForDuplicates });
+      const input: DuplicateDetectionClientInput = {
+        data, 
+        columns: selectedColumnsForDuplicates,
+        aiProvider: selectedAiProvider,
+        aiModelName: selectedAiModelName,
+      };
+      const result = await detectDuplicates(input);
       setDuplicatesResult(result);
       if (result.duplicates.length === 0) {
         showToast({ title: 'No Duplicates Found', description: 'No duplicate entries were found based on the selected columns.' });
       } else {
         showToast({ title: 'Duplicates Found', description: `${result.duplicates.length} set(s) of duplicates identified.` });
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error detecting duplicates:', error);
-      showToast({ title: 'Error', description: 'Failed to detect duplicates.', variant: 'destructive' });
+      let description = 'Failed to detect duplicates. Please try again.';
+      const errorMessage = String(error?.message || error).toLowerCase();
+      if (errorMessage.includes('api key') || errorMessage.includes('authentication')) {
+        description = 'Authentication failed with the AI provider. Check your API key.';
+      } else if (errorMessage.includes('model not found')) {
+        description = `The AI model ('${selectedAiProvider}/${selectedAiModelName}') was not found. Check AI Settings and key permissions.`;
+      } else if (errorMessage.includes('503') || errorMessage.includes('unavailable') || errorMessage.includes('overloaded')) {
+        description = 'The AI service is temporarily unavailable or overloaded. Please try again later.';
+      }
+      showToast({ title: 'Duplicate Detection Error', description, variant: 'destructive', duration: 9000 });
     } finally {
-      setIsLoading(false);
+      setIsProcessing(false);
+      setIsAppLoadingGlobal(false);
     }
   };
+
+  const isLoading = isAppLoadingGlobal || isProcessing;
 
   return (
     <Dialog open={activeDialog === 'duplicate'} onOpenChange={(isOpen) => !isOpen && closeDialog()}>
@@ -76,7 +102,7 @@ export function DuplicateDetectionDialog() {
         <DialogHeader>
           <DialogTitle className="font-headline flex items-center"><CopyCheck className="mr-2 h-5 w-5 text-primary"/>Duplicate Detection</DialogTitle>
           <DialogDescription>
-            Select columns to check for duplicate entries. AI will use fuzzy matching.
+            Select columns to check for duplicate entries. AI will use fuzzy matching. Ensure AI Provider & Model are set in AI Settings.
           </DialogDescription>
         </DialogHeader>
         
@@ -101,7 +127,11 @@ export function DuplicateDetectionDialog() {
               </div>
             </ScrollArea>
           </div>
-          <Button onClick={handleDetectDuplicates} disabled={isLoading || selectedColumnsForDuplicates.length === 0}>
+          <Button 
+            onClick={handleDetectDuplicates} 
+            disabled={isLoading || selectedColumnsForDuplicates.length === 0 || (!selectedAiProvider || !selectedAiModelName)}
+          >
+            {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <CopyCheck className="mr-2 h-4 w-4"/>}
             {isLoading ? 'Detecting...' : 'Detect Duplicates'}
           </Button>
         </div>

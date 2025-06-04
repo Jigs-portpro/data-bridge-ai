@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState } from 'react';
@@ -11,11 +12,11 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { useAppContext } from '@/hooks/useAppContext';
-import { generateAnomalyReport, type AnomalyReportOutput } from '@/ai/flows/anomaly-report';
+import { generateAnomalyReport, type AnomalyReportOutput, type AnomalyReportClientInput } from '@/ai/flows/anomaly-report';
 import { objectsToCsv } from '@/lib/csvUtils';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Siren } from 'lucide-react';
+import { Siren, Loader2 } from 'lucide-react';
 
 export function AnomalyReportDialog() {
   const {
@@ -24,25 +25,51 @@ export function AnomalyReportDialog() {
     activeDialog,
     closeDialog,
     showToast,
-    isLoading,
-    setIsLoading,
+    isLoading: isAppLoadingGlobal,
+    setIsLoading: setIsAppLoadingGlobal,
+    selectedAiProvider,
+    selectedAiModelName,
   } = useAppContext();
   const [report, setReport] = useState<AnomalyReportOutput | null>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
 
   const handleGenerateReport = async () => {
-    setIsLoading(true);
+    if (!selectedAiProvider || !selectedAiModelName) {
+      showToast({ title: 'AI Not Configured', description: 'Please select an AI provider and model in AI Settings.', variant: 'destructive'});
+      return;
+    }
+    setIsProcessing(true);
+    setIsAppLoadingGlobal(true);
     setReport(null);
     try {
       const csvData = objectsToCsv(columns, data);
-      const result = await generateAnomalyReport({ data: csvData, columnNames: columns });
+      const input: AnomalyReportClientInput = {
+        data: csvData,
+        columnNames: columns,
+        aiProvider: selectedAiProvider,
+        aiModelName: selectedAiModelName,
+      };
+      const result = await generateAnomalyReport(input);
       setReport(result);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error generating anomaly report:', error);
-      showToast({ title: 'Error', description: 'Failed to generate anomaly report.', variant: 'destructive' });
+      let description = 'Failed to generate anomaly report. Please try again.';
+      const errorMessage = String(error?.message || error).toLowerCase();
+      if (errorMessage.includes('api key') || errorMessage.includes('authentication')) {
+        description = 'Authentication failed with the AI provider. Check your API key.';
+      } else if (errorMessage.includes('model not found')) {
+        description = `The AI model ('${selectedAiProvider}/${selectedAiModelName}') was not found. Check AI Settings and key permissions.`;
+      } else if (errorMessage.includes('503') || errorMessage.includes('unavailable') || errorMessage.includes('overloaded')) {
+        description = 'The AI service is temporarily unavailable or overloaded. Please try again later.';
+      }
+      showToast({ title: 'Anomaly Report Error', description, variant: 'destructive', duration: 9000 });
     } finally {
-      setIsLoading(false);
+      setIsProcessing(false);
+      setIsAppLoadingGlobal(false);
     }
   };
+
+  const isLoading = isAppLoadingGlobal || isProcessing;
 
   return (
     <Dialog open={activeDialog === 'anomaly'} onOpenChange={(isOpen) => !isOpen && closeDialog()}>
@@ -50,13 +77,18 @@ export function AnomalyReportDialog() {
         <DialogHeader>
           <DialogTitle className="font-headline flex items-center"><Siren className="mr-2 h-5 w-5 text-primary"/>Anomaly Report</DialogTitle>
           <DialogDescription>
-            Generate a report highlighting potential data anomalies based on statistical analysis.
+            Generate a report highlighting potential data anomalies based on statistical analysis. Ensure AI Provider & Model are set in AI Settings.
           </DialogDescription>
         </DialogHeader>
         
         <div className="py-4">
            {!report && (
-            <Button onClick={handleGenerateReport} disabled={isLoading} className="w-full">
+            <Button 
+              onClick={handleGenerateReport} 
+              disabled={isLoading || (!selectedAiProvider || !selectedAiModelName)} 
+              className="w-full"
+            >
+                {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : null}
                 {isLoading ? 'Generating Report...' : 'Generate Anomaly Report'}
             </Button>
            )}
@@ -73,7 +105,13 @@ export function AnomalyReportDialog() {
                     </AlertDescription>
                 </ScrollArea>
             </Alert>
-            <Button onClick={handleGenerateReport} disabled={isLoading} variant="outline" className="w-full">
+            <Button 
+              onClick={handleGenerateReport} 
+              disabled={isLoading || (!selectedAiProvider || !selectedAiModelName)} 
+              variant="outline" 
+              className="w-full"
+            >
+                {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : null}
                 {isLoading ? 'Generating Report...' : 'Re-generate Report'}
             </Button>
           </div>
