@@ -59,7 +59,6 @@ export default function SetupPage() {
       setInitialConfigSnapshot(JSON.stringify({ baseUrl: config.baseUrl || 'https://api.example.com/v1', entities: loadedEntities }));
       
       if (loadedEntities.length > 0) {
-        // If there's a selected entity, try to keep it, otherwise select the first one.
         const currentSelectedIsValid = selectedEntityInternalId && loadedEntities.some(e => e.internalId === selectedEntityInternalId);
         if (!currentSelectedIsValid) {
             setSelectedEntityInternalId(loadedEntities[0].internalId);
@@ -79,7 +78,7 @@ export default function SetupPage() {
     } finally {
       setIsFetching(false);
     }
-  }, [showToast, selectedEntityInternalId]); // selectedEntityInternalId added to dependencies to re-evaluate selection if config reloads
+  }, [showToast, selectedEntityInternalId]); 
 
   useEffect(() => {
     if (isAuthLoading === false && isAuthenticated === false) {
@@ -173,7 +172,7 @@ export default function SetupPage() {
         fields: [],
     };
     setEntities([...entities, newEntity]);
-    setSelectedEntityInternalId(newEntityInternalId); // Auto-select the new entity
+    setSelectedEntityInternalId(newEntityInternalId); 
   };
 
   const handleRemoveEntity = (internalIdToRemove: string) => {
@@ -335,7 +334,7 @@ export default function SetupPage() {
                 <Select 
                     value={selectedEntityInternalId || ""} 
                     onValueChange={(value) => setSelectedEntityInternalId(value || null)}
-                    disabled={isFetching || entities.length === 0}
+                    disabled={isFetching === true || entities.length === 0}
                 >
                     <SelectTrigger id="entity-selector" className="mt-1">
                         <SelectValue placeholder={entities.length === 0 ? "No entities configured" : "Select an entity..."} />
@@ -434,7 +433,8 @@ export default function SetupPage() {
                       <span>LOOKUP FIELD</span>
                       <span className="text-right">ACTIONS</span>
                     </div>
-                    <ScrollArea className="max-h-[300px] mt-1"> 
+                    {/* Removed max-h from this ScrollArea to let the outer ScrollArea handle it */}
+                    <ScrollArea className="mt-1"> 
                       <div className="space-y-1 pr-2">
                         {currentEntity.fields.length === 0 && <p className="text-xs text-muted-foreground text-center py-4">No fields defined for this entity.</p>}
                         {currentEntity.fields.map((field) => (
