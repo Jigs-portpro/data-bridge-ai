@@ -6,13 +6,14 @@ const Table = React.forwardRef<
   HTMLTableElement,
   React.HTMLAttributes<HTMLTableElement>
 >(({ className, ...props }, ref) => (
-  <div className="relative w-full overflow-auto">
-    <table
-      ref={ref}
-      className={cn("w-full caption-bottom text-sm", className)}
-      {...props}
-    />
-  </div>
+  // The outer div with "relative w-full overflow-auto" has been removed.
+  // The ScrollArea component (or any other consumer) will now be
+  // solely responsible for handling overflow of the table.
+  <table
+    ref={ref}
+    className={cn("w-full caption-bottom text-sm", className)}
+    {...props}
+  />
 ))
 Table.displayName = "Table"
 
