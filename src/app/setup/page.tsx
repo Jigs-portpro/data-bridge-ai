@@ -10,8 +10,8 @@ import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Trash2, PlusCircle, GripVertical, Save, XCircle, Loader2 } from 'lucide-react';
-import type { ExportEntity, ExportEntityField, ExportConfig, LookupValidationConfig } from '@/config/exportEntities';
+import { Trash2, PlusCircle, GripVertical, Save, XCircle, Loader2, ListFilter } from 'lucide-react';
+import type { ExportEntity, ExportEntityField, ExportConfig } from '@/config/exportEntities';
 import { useAppContext } from '@/hooks/useAppContext';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
@@ -33,6 +33,7 @@ export default function SetupPage() {
   const router = useRouter();
   const [baseUrl, setBaseUrl] = useState<string>('');
   const [entities, setEntities] = useState<SetupExportEntity[]>([]);
+  const [selectedEntityInternalId, setSelectedEntityInternalId] = useState<string | null>(null);
   const [isFetching, setIsFetching] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [initialConfigSnapshot, setInitialConfigSnapshot] = useState<string>('');
@@ -56,17 +57,29 @@ export default function SetupPage() {
       }));
       setEntities(loadedEntities);
       setInitialConfigSnapshot(JSON.stringify({ baseUrl: config.baseUrl || 'https://api.example.com/v1', entities: loadedEntities }));
+      
+      if (loadedEntities.length > 0) {
+        // If there's a selected entity, try to keep it, otherwise select the first one.
+        const currentSelectedIsValid = selectedEntityInternalId && loadedEntities.some(e => e.internalId === selectedEntityInternalId);
+        if (!currentSelectedIsValid) {
+            setSelectedEntityInternalId(loadedEntities[0].internalId);
+        }
+      } else {
+        setSelectedEntityInternalId(null);
+      }
+
     } catch (error) {
       console.error('Failed to load entities config:', error);
       showToast({ title: 'Error', description: 'Could not load entity configurations. Using defaults.', variant: 'destructive' });
       const defaultBaseUrl = 'https://api.example.com/v1';
       setBaseUrl(defaultBaseUrl);
       setEntities([]);
+      setSelectedEntityInternalId(null);
       setInitialConfigSnapshot(JSON.stringify({ baseUrl: defaultBaseUrl, entities: [] }));
     } finally {
       setIsFetching(false);
     }
-  }, [showToast]);
+  }, [showToast, selectedEntityInternalId]); // selectedEntityInternalId added to dependencies to re-evaluate selection if config reloads
 
   useEffect(() => {
     if (isAuthLoading === false && isAuthenticated === false) {
@@ -75,6 +88,7 @@ export default function SetupPage() {
       fetchConfig();
     }
   }, [isAuthenticated, isAuthLoading, router, fetchConfig]);
+  
 
   const { totalEntities, totalFields, totalRequiredFields } = useMemo(() => {
     let fieldsCount = 0;
@@ -151,20 +165,23 @@ export default function SetupPage() {
     const randomSuffix = Math.random().toString(36).substring(2, 7);
     const newEntityInternalId = `entity-internal-${Date.now()}-${randomSuffix}`;
     const newEntityId = `new-entity-${entities.length + 1}-${randomSuffix}`;
-    setEntities([
-      ...entities,
-      {
+    const newEntity: SetupExportEntity = {
         internalId: newEntityInternalId,
         id: newEntityId,
         name: `New Entity ${entities.length + 1}`,
         url: '/new-endpoint',
         fields: [],
-      },
-    ]);
+    };
+    setEntities([...entities, newEntity]);
+    setSelectedEntityInternalId(newEntityInternalId); // Auto-select the new entity
   };
 
-  const handleRemoveEntity = (internalId: string) => {
-    setEntities(entities.filter((e) => e.internalId !== internalId));
+  const handleRemoveEntity = (internalIdToRemove: string) => {
+    const newEntities = entities.filter((e) => e.internalId !== internalIdToRemove);
+    setEntities(newEntities);
+    if (selectedEntityInternalId === internalIdToRemove) {
+      setSelectedEntityInternalId(newEntities.length > 0 ? newEntities[0].internalId : null);
+    }
   };
 
   const handleEntityChange = (internalId: string, field: keyof Omit<SetupExportEntity, 'fields' | 'internalId'>, value: any) => {
@@ -250,6 +267,10 @@ export default function SetupPage() {
       )
     );
   };
+  
+  const currentEntity = useMemo(() => {
+    return entities.find(e => e.internalId === selectedEntityInternalId);
+  }, [entities, selectedEntityInternalId]);
 
 
   if (isAuthLoading === true || (isAuthenticated === false && isAuthLoading === false) || (isFetching === true && entities.length === 0 && isAuthenticated === true)) {
@@ -297,16 +318,38 @@ export default function SetupPage() {
             </Card>
           </div>
           
-          <div>
-            <Label htmlFor="baseUrl" className="text-sm font-medium">Base API URL</Label>
-            <Input
-              id="baseUrl"
-              value={baseUrl}
-              onChange={(e) => setBaseUrl(e.target.value)}
-              placeholder="e.g., https://api.example.com/v1"
-              className="mt-1"
-            />
-            <p className="text-xs text-muted-foreground mt-1">This URL will prefix all entity endpoint paths.</p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4 items-end">
+            <div>
+              <Label htmlFor="baseUrl" className="text-sm font-medium">Base API URL</Label>
+              <Input
+                id="baseUrl"
+                value={baseUrl}
+                onChange={(e) => setBaseUrl(e.target.value)}
+                placeholder="e.g., https://api.example.com/v1"
+                className="mt-1"
+              />
+              <p className="text-xs text-muted-foreground mt-1">This URL will prefix all entity endpoint paths.</p>
+            </div>
+            <div>
+                <Label htmlFor="entity-selector" className="text-sm font-medium">Select Entity to Edit</Label>
+                <Select 
+                    value={selectedEntityInternalId || ""} 
+                    onValueChange={(value) => setSelectedEntityInternalId(value || null)}
+                    disabled={isFetching || entities.length === 0}
+                >
+                    <SelectTrigger id="entity-selector" className="mt-1">
+                        <SelectValue placeholder={entities.length === 0 ? "No entities configured" : "Select an entity..."} />
+                    </SelectTrigger>
+                    <SelectContent>
+                        {entities.length === 0 && <SelectItem value="no-entities" disabled>No entities configured</SelectItem>}
+                        {entities.map(entity => (
+                            <SelectItem key={entity.internalId} value={entity.internalId}>
+                                {entity.name}
+                            </SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
+            </div>
           </div>
         </div>
 
@@ -314,8 +357,17 @@ export default function SetupPage() {
         
         <ScrollArea className="flex-grow min-h-0 p-6 pt-0">
           <div className="space-y-6">
-            {isFetching === true && entities.length === 0 && <Loader2 className="mx-auto h-8 w-8 animate-spin text-primary" />}
-            {isFetching === false && entities.length === 0 && (
+            {isFetching && !currentEntity && <Loader2 className="mx-auto h-8 w-8 animate-spin text-primary" />}
+            {!isFetching && !currentEntity && entities.length > 0 && (
+                <Card className="text-center py-10">
+                    <CardContent>
+                    <ListFilter className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                    <h3 className="text-lg font-semibold">Select an Entity</h3>
+                    <p className="text-muted-foreground text-sm">Choose an entity from the dropdown above to view and edit its details.</p>
+                    </CardContent>
+                </Card>
+            )}
+             {!isFetching && entities.length === 0 && (
               <Card className="text-center py-10">
                 <CardContent>
                   <h3 className="text-lg font-semibold">No Entities Configured</h3>
@@ -323,24 +375,24 @@ export default function SetupPage() {
                 </CardContent>
               </Card>
             )}
-            {entities.map((entity) => (
-              <Card key={entity.internalId} className="overflow-hidden">
+            {currentEntity && (
+              <Card key={currentEntity.internalId} className="overflow-hidden">
                 <CardHeader className="bg-muted/30 p-4 border-b">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2 flex-grow">
                       <GripVertical className="h-5 w-5 text-muted-foreground cursor-grab flex-shrink-0" />
                       <Input
-                        value={entity.name}
-                        onChange={(e) => handleEntityChange(entity.internalId, 'name', e.target.value)}
+                        value={currentEntity.name}
+                        onChange={(e) => handleEntityChange(currentEntity.internalId, 'name', e.target.value)}
                         className="text-lg font-semibold border-0 shadow-none focus-visible:ring-0 bg-transparent p-0 h-auto flex-grow"
                         placeholder="Entity Name"
                       />
                     </div>
                     <div className="flex items-center gap-2 flex-shrink-0">
-                      <Button onClick={() => handleAddField(entity.internalId)} size="sm" variant="outline">
+                      <Button onClick={() => handleAddField(currentEntity.internalId)} size="sm" variant="outline">
                         <PlusCircle className="mr-1.5 h-4 w-4" /> Add Field
                       </Button>
-                      <Button variant="ghost" size="icon" className="text-destructive hover:bg-destructive/10 h-8 w-8" onClick={() => handleRemoveEntity(entity.internalId)}>
+                      <Button variant="ghost" size="icon" className="text-destructive hover:bg-destructive/10 h-8 w-8" onClick={() => handleRemoveEntity(currentEntity.internalId)}>
                         <Trash2 className="h-4 w-4" />
                       </Button>
                     </div>
@@ -349,21 +401,21 @@ export default function SetupPage() {
                 <CardContent className="p-4 space-y-4">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                      <Label htmlFor={`entity-id-${entity.internalId}`} className="text-xs">Entity ID</Label>
+                      <Label htmlFor={`entity-id-${currentEntity.internalId}`} className="text-xs">Entity ID (API Key)</Label>
                       <Input
-                        id={`entity-id-${entity.internalId}`}
-                        value={entity.id}
-                        onChange={(e) => handleEntityChange(entity.internalId, 'id', e.target.value)}
+                        id={`entity-id-${currentEntity.internalId}`}
+                        value={currentEntity.id}
+                        onChange={(e) => handleEntityChange(currentEntity.internalId, 'id', e.target.value)}
                         placeholder="e.g., tmsCustomer"
                         className="mt-1 text-sm"
                       />
                     </div>
                     <div>
-                      <Label htmlFor={`entity-url-${entity.internalId}`} className="text-xs">Endpoint Path</Label>
+                      <Label htmlFor={`entity-url-${currentEntity.internalId}`} className="text-xs">Endpoint Path</Label>
                       <Input
-                        id={`entity-url-${entity.internalId}`}
-                        value={entity.url}
-                        onChange={(e) => handleEntityChange(entity.internalId, 'url', e.target.value)}
+                        id={`entity-url-${currentEntity.internalId}`}
+                        value={currentEntity.url}
+                        onChange={(e) => handleEntityChange(currentEntity.internalId, 'url', e.target.value)}
                         placeholder="e.g., /customers"
                         className="mt-1 text-sm"
                       />
@@ -377,25 +429,25 @@ export default function SetupPage() {
                       <span className="text-center">REQUIRED</span>
                       <span>MIN</span>
                       <span>MAX</span>
-                      <span>PATTERN</span>
+                      <span>PATTERN (RegEx)</span>
                       <span>LOOKUP ID</span>
                       <span>LOOKUP FIELD</span>
                       <span className="text-right">ACTIONS</span>
                     </div>
                     <ScrollArea className="max-h-[300px] mt-1"> 
                       <div className="space-y-1 pr-2">
-                        {entity.fields.length === 0 && <p className="text-xs text-muted-foreground text-center py-4">No fields defined for this entity.</p>}
-                        {entity.fields.map((field) => (
+                        {currentEntity.fields.length === 0 && <p className="text-xs text-muted-foreground text-center py-4">No fields defined for this entity.</p>}
+                        {currentEntity.fields.map((field) => (
                           <div key={field.internalId} className="grid grid-cols-[minmax(180px,2fr)_minmax(120px,1fr)_auto_minmax(80px,0.5fr)_minmax(80px,0.5fr)_minmax(120px,1fr)_minmax(150px,1fr)_minmax(150px,1fr)_auto] gap-x-2 gap-y-1 items-center p-2 border rounded-md hover:bg-muted/20">
                             <Input
                               value={field.name}
-                              onChange={(e) => handleFieldChange(entity.internalId, field.internalId, 'name', e.target.value)}
+                              onChange={(e) => handleFieldChange(currentEntity.internalId, field.internalId, 'name', e.target.value)}
                               placeholder="Target API Field Name"
                               className="text-xs h-8"
                             />
                             <Select
                               value={field.type}
-                              onValueChange={(value) => handleFieldChange(entity.internalId, field.internalId, 'type', value)}
+                              onValueChange={(value) => handleFieldChange(currentEntity.internalId, field.internalId, 'type', value)}
                             >
                               <SelectTrigger className="text-xs h-8">
                                 <SelectValue placeholder="Select type" />
@@ -411,46 +463,48 @@ export default function SetupPage() {
                             <div className="flex justify-center">
                               <Checkbox
                                 checked={!!field.required}
-                                onCheckedChange={(checked) => handleFieldChange(entity.internalId, field.internalId, 'required', !!checked)}
+                                onCheckedChange={(checked) => handleFieldChange(currentEntity.internalId, field.internalId, 'required', !!checked)}
                                 className="h-4 w-4"
                               />
                             </div>
                             
                             {(field.type === 'string' || field.type === 'email') ? (
                               <>
-                                <Input type="number" placeholder="Min L" value={field.minLength ?? ''} onChange={(e) => handleFieldChange(entity.internalId, field.internalId, 'minLength', e.target.value)} className="text-xs h-8"/>
-                                <Input type="number" placeholder="Max L" value={field.maxLength ?? ''} onChange={(e) => handleFieldChange(entity.internalId, field.internalId, 'maxLength', e.target.value)} className="text-xs h-8"/>
-                                <Input placeholder="Regex" value={field.pattern ?? ''} onChange={(e) => handleFieldChange(entity.internalId, field.internalId, 'pattern', e.target.value)} className="text-xs h-8"/>
+                                <Input type="number" placeholder="Min Len" title="Minimum Length" value={field.minLength ?? ''} onChange={(e) => handleFieldChange(currentEntity.internalId, field.internalId, 'minLength', e.target.value)} className="text-xs h-8"/>
+                                <Input type="number" placeholder="Max Len" title="Maximum Length" value={field.maxLength ?? ''} onChange={(e) => handleFieldChange(currentEntity.internalId, field.internalId, 'maxLength', e.target.value)} className="text-xs h-8"/>
+                                <Input placeholder="Regex Pattern" title="Regular Expression Pattern" value={field.pattern ?? ''} onChange={(e) => handleFieldChange(currentEntity.internalId, field.internalId, 'pattern', e.target.value)} className="text-xs h-8"/>
                               </>
                             ) : field.type === 'number' ? (
                               <>
-                                <Input type="number" placeholder="Min V" value={field.minValue ?? ''} onChange={(e) => handleFieldChange(entity.internalId, field.internalId, 'minValue', e.target.value)} className="text-xs h-8"/>
-                                <Input type="number" placeholder="Max V" value={field.maxValue ?? ''} onChange={(e) => handleFieldChange(entity.internalId, field.internalId, 'maxValue', e.target.value)} className="text-xs h-8"/>
-                                <div className="w-full h-8"></div> 
+                                <Input type="number" placeholder="Min Val" title="Minimum Value" value={field.minValue ?? ''} onChange={(e) => handleFieldChange(currentEntity.internalId, field.internalId, 'minValue', e.target.value)} className="text-xs h-8"/>
+                                <Input type="number" placeholder="Max Val" title="Maximum Value" value={field.maxValue ?? ''} onChange={(e) => handleFieldChange(currentEntity.internalId, field.internalId, 'maxValue', e.target.value)} className="text-xs h-8"/>
+                                <div className="w-full h-8 bg-muted/30 rounded-md"></div> 
                               </>
                             ) : ( 
                               <>
-                                <div className="w-full h-8"></div>
-                                <div className="w-full h-8"></div>
-                                <div className="w-full h-8"></div>
+                                <div className="w-full h-8 bg-muted/30 rounded-md"></div>
+                                <div className="w-full h-8 bg-muted/30 rounded-md"></div>
+                                <div className="w-full h-8 bg-muted/30 rounded-md"></div>
                               </>
                             )}
                             
                             <Input 
-                                placeholder="Lookup ID" 
+                                placeholder="Lookup ID (e.g., chassisOwners)" 
+                                title="Lookup ID (e.g., chassisOwners from Lookups page)"
                                 value={field.lookupValidation?.lookupId ?? ''} 
-                                onChange={(e) => handleFieldChange(entity.internalId, field.internalId, 'lookupId', e.target.value)} 
+                                onChange={(e) => handleFieldChange(currentEntity.internalId, field.internalId, 'lookupId', e.target.value)} 
                                 className="text-xs h-8"
                             />
                             <Input 
-                                placeholder="Lookup Field" 
+                                placeholder="Lookup Field (e.g., company_name)" 
+                                title="Field in Lookup Data (e.g., company_name)"
                                 value={field.lookupValidation?.lookupField ?? ''} 
-                                onChange={(e) => handleFieldChange(entity.internalId, field.internalId, 'lookupField', e.target.value)} 
+                                onChange={(e) => handleFieldChange(currentEntity.internalId, field.internalId, 'lookupField', e.target.value)} 
                                 className="text-xs h-8"
                             />
 
                             <div className="text-right">
-                              <Button variant="ghost" size="icon" className="text-destructive hover:bg-destructive/10 h-7 w-7" onClick={() => handleRemoveField(entity.internalId, field.internalId)}>
+                              <Button variant="ghost" size="icon" className="text-destructive hover:bg-destructive/10 h-7 w-7" onClick={() => handleRemoveField(currentEntity.internalId, field.internalId)}>
                                 <Trash2 className="h-3.5 w-3.5" />
                               </Button>
                             </div>
@@ -461,7 +515,7 @@ export default function SetupPage() {
                   </div>
                 </CardContent>
               </Card>
-            ))}
+            )}
           </div>
         </ScrollArea>
 
