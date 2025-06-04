@@ -349,12 +349,12 @@ export default function SetupPage() {
                     </SelectContent>
                 </Select>
                 {entities.length > 0 && !selectedEntityInternalId && !isFetching && (
-                  <p className="text-xs text-muted-foreground mt-1">
+                  <p key="select-prompt" className="text-xs text-muted-foreground mt-1">
                     Please select an entity to edit from the dropdown.
                   </p>
                 )}
                  {entities.length === 0 && !isFetching && (
-                  <p className="text-xs text-muted-foreground mt-1">
+                  <p key="no-entities-prompt" className="text-xs text-muted-foreground mt-1">
                     No entities are configured yet. Click "Add New Entity" to start.
                   </p>
                 )}
