@@ -385,7 +385,7 @@ export default function SetupPage() {
               </Card>
             )}
             {currentEntity && (
-              <Card key={currentEntity.internalId} className="overflow-hidden">
+              <Card key={currentEntity.internalId} className="overflow-hidden w-full">
                 <CardHeader className="bg-muted/30 p-4 border-b">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2 flex-grow">
@@ -505,7 +505,7 @@ export default function SetupPage() {
                                 className="text-xs h-8"
                             />
                             <Input 
-                                placeholder="Lookup Field (e.g., company_name)" 
+                                placeholder="Field in Lookup Data (e.g., company_name)" 
                                 title="Field in Lookup Data (e.g., company_name)"
                                 value={field.lookupValidation?.lookupField ?? ''} 
                                 onChange={(e) => handleFieldChange(currentEntity.internalId, field.internalId, 'lookupField', e.target.value)} 
