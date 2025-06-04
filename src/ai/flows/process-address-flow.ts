@@ -92,12 +92,17 @@ export async function processAddress(input: ProcessAddressClientInput): Promise<
     };
   }
   
-  const modelIdentifier = `${aiProvider}/${aiModelName}`;
+  let modelToUse: string;
+  if (aiProvider === 'googleai') {
+      modelToUse = `${aiProvider}/${aiModelName}`;
+  } else {
+      modelToUse = aiModelName; // For openai, anthropic (genkitx-* plugins)
+  }
 
   try {
     const {output} = await addressProcessingPrompt(
       promptData,
-      { model: modelIdentifier }
+      { model: modelToUse }
     );
     if (!output) {
       throw new Error("AI did not return an output for address processing.");
@@ -108,7 +113,7 @@ export async function processAddress(input: ProcessAddressClientInput): Promise<
     
     return output;
   } catch (error) {
-    console.error(`Error in processAddress with model ${modelIdentifier}:`, error);
+    console.error(`Error in processAddress with model ${modelToUse}:`, error);
     // Return a structured error output
     return {
       cleanedStreetAddress: promptData.streetAddress, // return original street
@@ -118,8 +123,9 @@ export async function processAddress(input: ProcessAddressClientInput): Promise<
       cleanedCountry: promptData.country || null,
       latitude: null,
       longitude: null,
-      status: 'CLEANUP_FAILED', // Or GEOCODE_FAILED depending on where it likely failed
+      status: 'CLEANUP_FAILED', 
       aiReasoning: `AI processing failed. Error: ${error instanceof Error ? error.message : String(error)}`,
     };
   }
 }
+

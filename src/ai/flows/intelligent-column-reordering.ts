@@ -85,9 +85,15 @@ const intelligentColumnReorderingFlow = ai.defineFlow(
   },
   async (clientInput) => {
     const { aiProvider, aiModelName, ...promptData } = clientInput;
-    const modelIdentifier = `${aiProvider}/${aiModelName}`;
     
-    const {output} = await prompt(promptData, { model: modelIdentifier });
+    let modelToUse: string;
+    if (aiProvider === 'googleai') {
+        modelToUse = `${aiProvider}/${aiModelName}`;
+    } else {
+        modelToUse = aiModelName; // For openai, anthropic (genkitx-* plugins)
+    }
+    
+    const {output} = await prompt(promptData, { model: modelToUse });
     if (!output) {
       throw new Error("AI did not return an output for intelligent column reordering.");
     }

@@ -88,15 +88,20 @@ const duplicateDetectionFlow = ai.defineFlow(
   },
   async (clientInput) => {
     const { aiProvider, aiModelName, data, columns } = clientInput;
-    const modelIdentifier = `${aiProvider}/${aiModelName}`;
+    
+    let modelToUse: string;
+    if (aiProvider === 'googleai') {
+        modelToUse = `${aiProvider}/${aiModelName}`;
+    } else {
+        modelToUse = aiModelName; // For openai, anthropic (genkitx-* plugins)
+    }
 
-    // Prepare data for the prompt, mapping client 'columns' to 'columnsToCheck'
     const promptData: z.infer<typeof DuplicateDetectionPromptInputSchema> = {
       data: data,
-      columnsToCheck: columns, // Map 'columns' from client to 'columnsToCheck' for the prompt
+      columnsToCheck: columns, 
     };
 
-    const {output} = await duplicateDetectionPrompt(promptData, { model: modelIdentifier });
+    const {output} = await duplicateDetectionPrompt(promptData, { model: modelToUse });
     if (!output) {
       throw new Error("AI did not return an output for duplicate detection.");
     }
