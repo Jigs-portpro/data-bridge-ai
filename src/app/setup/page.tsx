@@ -11,7 +11,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Trash2, PlusCircle, GripVertical, Save, XCircle, Loader2 } from 'lucide-react';
-import type { ExportEntity, ExportEntityField, ExportConfig } from '@/config/exportEntities';
+import type { ExportEntity, ExportEntityField, ExportConfig, LookupValidationConfig } from '@/config/exportEntities';
 import { useAppContext } from '@/hooks/useAppContext';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
@@ -106,6 +106,26 @@ export default function SetupPage() {
         if (cleanedField.minValue === undefined || cleanedField.minValue === null || isNaN(Number(cleanedField.minValue))) delete cleanedField.minValue;
         if (cleanedField.maxValue === undefined || cleanedField.maxValue === null || isNaN(Number(cleanedField.maxValue))) delete cleanedField.maxValue;
         if (cleanedField.pattern === '' || cleanedField.pattern === undefined) delete cleanedField.pattern;
+        
+        // Clean up lookupValidation
+        if (cleanedField.lookupValidation) {
+          const lv = cleanedField.lookupValidation;
+          const lookupIdIsEmpty = !lv.lookupId || String(lv.lookupId).trim() === '';
+          const lookupFieldIsEmpty = !lv.lookupField || String(lv.lookupField).trim() === '';
+
+          if (lookupIdIsEmpty) { // If lookupId is empty, the whole validation object is invalid
+            delete cleanedField.lookupValidation;
+          } else if (lookupFieldIsEmpty) { 
+            // If lookupId is present but lookupField is empty, it's also often an invalid state.
+            // For now, we'll keep it if lookupId is present, but one might argue to clear it too.
+            // This depends on how strict the backend/validation logic is.
+            // Let's assume for now that an empty lookupField is permissible if lookupId is set,
+            // though it might not be useful. A more robust approach might be to clear
+            // lookupValidation if lookupField is also empty.
+            // For this iteration: if lookupId is set, we keep the object, even if lookupField is empty.
+            // If lookupId is empty, the entire object is removed.
+          }
+        }
         return cleanedField;
       })
     }));
@@ -123,7 +143,8 @@ export default function SetupPage() {
         throw new Error(errorData.message);
       }
       showToast({ title: 'Success', description: 'Configuration saved successfully.' });
-      setInitialConfigSnapshot(JSON.stringify(configToSave)); // Update snapshot
+      // Update snapshot with the actual saved structure (after cleaning)
+      setInitialConfigSnapshot(JSON.stringify(configToSave)); 
     } catch (error: any) {
       console.error('Failed to save entities config:', error);
       showToast({ title: 'Error Saving', description: error.message || 'Could not save entity configurations.', variant: 'destructive' });
@@ -197,7 +218,7 @@ export default function SetupPage() {
   const handleFieldChange = (
     entityInternalId: string,
     fieldInternalId: string,
-    prop: keyof SetupExportEntityField,
+    prop: keyof SetupExportEntityField | 'lookupId' | 'lookupField',
     value: any
   ) => {
     setEntities(
@@ -205,23 +226,45 @@ export default function SetupPage() {
         e.internalId === entityInternalId
           ? {
               ...e,
-              fields: e.fields.map((f) =>
-                f.internalId === fieldInternalId
-                  ? {
-                      ...f,
-                      [prop]: (prop === 'minLength' || prop === 'maxLength' || prop === 'minValue' || prop === 'maxValue')
-                               ? (value === '' || isNaN(Number(value)) ? undefined : Number(value))
-                               : (prop === 'pattern' && value === '')
-                                 ? undefined
-                                 : value
-                    }
-                  : f
-              ),
+              fields: e.fields.map((f) => {
+                if (f.internalId !== fieldInternalId) return f;
+
+                if (prop === 'lookupId' || prop === 'lookupField') {
+                  const currentLv = f.lookupValidation || { lookupId: '', lookupField: '' };
+                  let newLv: SetupExportEntityField['lookupValidation'];
+
+                  if (prop === 'lookupId') {
+                    newLv = { ...currentLv, lookupId: value as string };
+                  } else { // prop === 'lookupField'
+                    newLv = { ...currentLv, lookupField: value as string };
+                  }
+
+                  // If both lookupId and lookupField are effectively empty, remove the lookupValidation object
+                  if ((!newLv.lookupId || String(newLv.lookupId).trim() === '') && 
+                      (!newLv.lookupField || String(newLv.lookupField).trim() === '')) {
+                    const { lookupValidation, ...fieldWithoutLv } = f; // Create a copy without lookupValidation
+                    return fieldWithoutLv; // Return field without lookupValidation property
+                  } else {
+                    return { ...f, lookupValidation: newLv };
+                  }
+                } else {
+                  // Existing logic for other props
+                  return {
+                    ...f,
+                    [prop]: (prop === 'minLength' || prop === 'maxLength' || prop === 'minValue' || prop === 'maxValue')
+                              ? (value === '' || isNaN(Number(value)) ? undefined : Number(value))
+                              : (prop === 'pattern' && value === '')
+                                ? undefined
+                                : value
+                  };
+                }
+              }),
             }
           : e
       )
     );
   };
+
 
   if (isAuthLoading || !isAuthenticated || (isFetching && !entities.length)) {
     return (
@@ -345,20 +388,22 @@ export default function SetupPage() {
                   
                   {/* Fields Table */}
                   <div className="mt-4">
-                    <div className="grid grid-cols-[minmax(150px,1.5fr)_minmax(120px,1fr)_auto_repeat(3,minmax(100px,0.75fr))_auto] gap-x-2 gap-y-1 items-center px-2 py-1.5 text-xs font-medium text-muted-foreground border-b">
+                    <div className="grid grid-cols-[minmax(150px,1.5fr)_minmax(120px,1fr)_auto_repeat(5,minmax(100px,0.75fr))_auto] gap-x-2 gap-y-1 items-center px-2 py-1.5 text-xs font-medium text-muted-foreground border-b">
                       <span>FIELD NAME</span>
                       <span>DATA TYPE</span>
                       <span className="text-center">REQUIRED</span>
                       <span>MIN</span>
                       <span>MAX</span>
                       <span>PATTERN</span>
+                      <span>LOOKUP ID</span>
+                      <span>LOOKUP FIELD</span>
                       <span className="text-right">ACTIONS</span>
                     </div>
                     <ScrollArea className="max-h-[300px] mt-1"> {/* Vertical scroll for fields */}
                       <div className="space-y-1 pr-2">
                         {entity.fields.length === 0 && <p className="text-xs text-muted-foreground text-center py-4">No fields defined for this entity.</p>}
                         {entity.fields.map((field) => (
-                          <div key={field.internalId} className="grid grid-cols-[minmax(150px,1.5fr)_minmax(120px,1fr)_auto_repeat(3,minmax(100px,0.75fr))_auto] gap-x-2 gap-y-1 items-center p-2 border rounded-md hover:bg-muted/20">
+                          <div key={field.internalId} className="grid grid-cols-[minmax(150px,1.5fr)_minmax(120px,1fr)_auto_repeat(5,minmax(100px,0.75fr))_auto] gap-x-2 gap-y-1 items-center p-2 border rounded-md hover:bg-muted/20">
                             <Input
                               value={field.name}
                               onChange={(e) => handleFieldChange(entity.internalId, field.internalId, 'name', e.target.value)}
@@ -401,13 +446,27 @@ export default function SetupPage() {
                                 <Input type="number" placeholder="Max V" value={field.maxValue ?? ''} onChange={(e) => handleFieldChange(entity.internalId, field.internalId, 'maxValue', e.target.value)} className="text-xs h-8"/>
                                 <div className="w-full h-8"></div> {/* Placeholder for pattern col */}
                               </>
-                            ) : ( // boolean, date or other types - empty placeholders
+                            ) : ( 
                               <>
                                 <div className="w-full h-8"></div>
                                 <div className="w-full h-8"></div>
                                 <div className="w-full h-8"></div>
                               </>
                             )}
+                            
+                            {/* Lookup Validation Inputs */}
+                            <Input 
+                                placeholder="Lookup ID" 
+                                value={field.lookupValidation?.lookupId ?? ''} 
+                                onChange={(e) => handleFieldChange(entity.internalId, field.internalId, 'lookupId', e.target.value)} 
+                                className="text-xs h-8"
+                            />
+                            <Input 
+                                placeholder="Lookup Field" 
+                                value={field.lookupValidation?.lookupField ?? ''} 
+                                onChange={(e) => handleFieldChange(entity.internalId, field.internalId, 'lookupField', e.target.value)} 
+                                className="text-xs h-8"
+                            />
 
                             <div className="text-right">
                               <Button variant="ghost" size="icon" className="text-destructive hover:bg-destructive/10 h-7 w-7" onClick={() => handleRemoveField(entity.internalId, field.internalId)}>
@@ -441,3 +500,4 @@ export default function SetupPage() {
     </AppLayout>
   );
 }
+
