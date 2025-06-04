@@ -14,7 +14,7 @@
           "maxLength": 50
         },
         {
-          "name": "newField2",
+          "name": "Organization Type",
           "type": "string",
           "required": true
         },
@@ -67,7 +67,11 @@
         {
           "name": "Chasis Owner",
           "type": "string",
-          "required": true
+          "required": true,
+          "lookupValidation": {
+            "lookupId": "chassisOwners",
+            "lookupField": "Chasis Owner"
+          }
         },
         {
           "name": "Chasis Size",
