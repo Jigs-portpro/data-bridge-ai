@@ -8,7 +8,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
-import { Cpu, Info, KeyRound, Save, Loader2, BookOpen } from 'lucide-react';
+import { Cpu, Info, KeyRound, Save, Loader2, BookOpen, FileText } from 'lucide-react';
 import { useAppContext } from '@/hooks/useAppContext';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
@@ -79,16 +79,18 @@ export default function AiSettingsPage() {
         setCurrentModel('');
       }
     } else {
-        if (envApiKeys.GOOGLE_API_KEY) {
-            setCurrentProvider('googleai');
-        } else if (envApiKeys.OPENAI_API_KEY) {
-            setCurrentProvider('openai');
-        } else if (envApiKeys.ANTHROPIC_API_KEY) {
-            setCurrentProvider('anthropic');
+        // Fallback logic if no provider is selected but keys exist
+        const firstAvailableProvider = PROVIDERS.find(p => envApiKeys[p.id.toUpperCase() + '_API_KEY']);
+        if (firstAvailableProvider) {
+            setCurrentProvider(firstAvailableProvider.id);
+            const models = ALL_KNOWN_MODELS.filter(m => m.provider === firstAvailableProvider.id);
+            setAvailableModelsForProvider(models);
+            setCurrentModel(models.length > 0 ? models[0].id : '');
         } else {
             setCurrentProvider('');
+            setAvailableModelsForProvider([]);
+            setCurrentModel('');
         }
-        setCurrentModel(''); 
     }
   }, [selectedAiProvider, selectedAiModelName, envApiKeys]);
 
@@ -98,9 +100,9 @@ export default function AiSettingsPage() {
     if (providerId && !envApiKeys[newProvider.toUpperCase() + '_API_KEY']) {
       showToast({
         title: "API Key Missing",
-        description: `The API key for ${PROVIDERS.find(p=>p.id === newProvider)?.name} is not set in your .env file. This provider may not work.`,
+        description: `The API key for ${PROVIDERS.find(p=>p.id === newProvider)?.name} is not set in your .env file (or .env.local). This provider may not work. Remember to restart the server after changing .env files.`,
         variant: "destructive",
-        duration: 7000,
+        duration: 9000,
       });
     }
     setCurrentProvider(newProvider);
@@ -145,6 +147,8 @@ export default function AiSettingsPage() {
   };
   
   const providerHasNoKey = currentProvider && !envApiKeys[currentProvider.toUpperCase() + '_API_KEY'];
+  const noKeysConfiguredAtAll = !envApiKeys.GOOGLE_API_KEY && !envApiKeys.OPENAI_API_KEY && !envApiKeys.ANTHROPIC_API_KEY;
+
 
   return (
     <AppLayout pageTitle="AI Provider & Model Settings">
@@ -155,7 +159,7 @@ export default function AiSettingsPage() {
             <AlertTitle>AI Configuration</AlertTitle>
             <AlertDescription>
               Select your preferred AI provider and model for generative features. 
-              The corresponding API key must be set in your <code className="font-mono text-sm bg-muted p-0.5 rounded">.env</code> file (and the server restarted) for the selected provider to function. 
+              The corresponding API key must be set in your <code className="font-mono text-sm bg-muted p-0.5 rounded">.env</code> or <code className="font-mono text-sm bg-muted p-0.5 rounded">.env.local</code> file (and the server restarted) for the selected provider to function. 
               Changes made here are saved locally in your browser and apply to new AI operations.
             </AlertDescription>
           </Alert>
@@ -170,32 +174,41 @@ export default function AiSettingsPage() {
             <CardContent className="space-y-6">
               <div className="space-y-2">
                 <Label htmlFor="ai-provider-select">AI Provider</Label>
-                <Select value={currentProvider} onValueChange={handleProviderChange} disabled={isSaving}>
+                <Select value={currentProvider} onValueChange={handleProviderChange} disabled={isSaving || noKeysConfiguredAtAll}>
                   <SelectTrigger id="ai-provider-select">
-                    <SelectValue placeholder="Select a provider" />
+                    <SelectValue placeholder={noKeysConfiguredAtAll ? "No API keys found in .env" : "Select a provider"} />
                   </SelectTrigger>
                   <SelectContent>
                     {PROVIDERS.map(provider => (
-                      <SelectItem key={provider.id} value={provider.id}>
+                      <SelectItem 
+                        key={provider.id} 
+                        value={provider.id}
+                        disabled={!envApiKeys[provider.id.toUpperCase() + '_API_KEY']}
+                      >
                         {provider.name} {!envApiKeys[provider.id.toUpperCase() + '_API_KEY'] && "(API Key Missing)"}
                       </SelectItem>
                     ))}
-                     {!envApiKeys.GOOGLE_API_KEY && !envApiKeys.OPENAI_API_KEY && !envApiKeys.ANTHROPIC_API_KEY && (
-                         <SelectItem value="no-keys" disabled>No API keys found in .env</SelectItem>
+                     {noKeysConfiguredAtAll && (
+                         <SelectItem value="no-keys-found" disabled>No API keys found in .env</SelectItem>
                     )}
                   </SelectContent>
                 </Select>
+                {noKeysConfiguredAtAll && (
+                    <p className="text-xs text-destructive mt-1">
+                        No API keys detected in your <code className="font-mono text-xs">.env</code> or <code className="font-mono text-xs">.env.local</code> files. Please set at least one and restart the server.
+                    </p>
+                )}
               </div>
 
               <div className="space-y-2">
                 <Label htmlFor="ai-model-select">Model Name</Label>
                 <Select value={currentModel} onValueChange={setCurrentModel} disabled={isSaving || !currentProvider || availableModelsForProvider.length === 0}>
                   <SelectTrigger id="ai-model-select">
-                    <SelectValue placeholder={!currentProvider ? "Select a provider first" : "Select a model"} />
+                    <SelectValue placeholder={!currentProvider ? "Select a provider first" : (availableModelsForProvider.length === 0 ? "No models for provider" : "Select a model")} />
                   </SelectTrigger>
                   <SelectContent>
                     {availableModelsForProvider.length === 0 && currentProvider && (
-                         <SelectItem value="no-models" disabled>No models listed for {PROVIDERS.find(p=>p.id === currentProvider)?.name} or provider not supported.</SelectItem>
+                         <SelectItem value="no-models" disabled>No models listed for {PROVIDERS.find(p=>p.id === currentProvider)?.name} or provider not supported/key missing.</SelectItem>
                     )}
                     {availableModelsForProvider.map(model => (
                       <SelectItem key={model.id} value={model.id}>
@@ -210,7 +223,7 @@ export default function AiSettingsPage() {
                     </p>
                  )}
               </div>
-              <Button onClick={handleSaveSettings} disabled={isSaving || !currentProvider || !currentModel} className="w-full sm:w-auto">
+              <Button onClick={handleSaveSettings} disabled={isSaving || !currentProvider || !currentModel || noKeysConfiguredAtAll} className="w-full sm:w-auto">
                 {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Save className="mr-2 h-4 w-4" />}
                 Save AI Settings
               </Button>
@@ -219,10 +232,10 @@ export default function AiSettingsPage() {
 
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center"><KeyRound className="mr-2 h-5 w-5 text-primary"/>API Key Status (from .env)</CardTitle>
+              <CardTitle className="flex items-center"><FileText className="mr-2 h-5 w-5 text-primary"/>API Key Status</CardTitle>
               <CardDescription>
-                For an AI Provider to work, its API key must be set in the <code className="font-mono text-sm bg-muted p-0.5 rounded">.env</code> file in your project root.
-                Restart the application server if you change <code className="font-mono text-sm bg-muted p-0.5 rounded">.env</code>.
+                Status of API keys detected from your <code className="font-mono text-sm bg-muted p-0.5 rounded">.env</code> or <code className="font-mono text-sm bg-muted p-0.5 rounded">.env.local</code> file by the server.
+                Restart the application server if you change these files. This status is fetched via an API call.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-2">
@@ -305,6 +318,3 @@ export default function AiSettingsPage() {
     </AppLayout>
   );
 }
-
-
-    
