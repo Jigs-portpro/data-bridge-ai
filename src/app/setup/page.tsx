@@ -334,7 +334,7 @@ export default function SetupPage() {
                 <Select 
                     value={selectedEntityInternalId || ""} 
                     onValueChange={(value) => setSelectedEntityInternalId(value || null)}
-                    disabled={isFetching === true || entities.length === 0}
+                    disabled={isFetching || entities.length === 0}
                 >
                     <SelectTrigger id="entity-selector" className="mt-1">
                         <SelectValue placeholder={entities.length === 0 ? "No entities configured" : "Select an entity..."} />
@@ -348,6 +348,16 @@ export default function SetupPage() {
                         ))}
                     </SelectContent>
                 </Select>
+                {entities.length > 0 && !selectedEntityInternalId && !isFetching && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Please select an entity to edit from the dropdown.
+                  </p>
+                )}
+                 {entities.length === 0 && !isFetching && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    No entities are configured yet. Click "Add New Entity" to start.
+                  </p>
+                )}
             </div>
           </div>
         </div>
@@ -433,7 +443,6 @@ export default function SetupPage() {
                       <span>LOOKUP FIELD</span>
                       <span className="text-right">ACTIONS</span>
                     </div>
-                    {/* Removed max-h from this ScrollArea to let the outer ScrollArea handle it */}
                     <ScrollArea className="mt-1"> 
                       <div className="space-y-1 pr-2">
                         {currentEntity.fields.length === 0 && <p className="text-xs text-muted-foreground text-center py-4">No fields defined for this entity.</p>}
@@ -521,11 +530,11 @@ export default function SetupPage() {
 
         <div className="p-6 border-t bg-background flex-shrink-0">
           <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={handleCancel} disabled={isSaving === true || isFetching === true}>
+            <Button variant="outline" onClick={handleCancel} disabled={isSaving || isFetching}>
                 <XCircle className="mr-2 h-4 w-4"/> Cancel
             </Button>
-            <Button onClick={handleSaveConfig} disabled={isSaving === true || isFetching === true}>
-              {isSaving === true ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+            <Button onClick={handleSaveConfig} disabled={isSaving || isFetching}>
+              {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
               Save Changes
             </Button>
           </div>
