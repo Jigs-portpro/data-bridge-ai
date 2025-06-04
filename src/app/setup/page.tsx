@@ -388,7 +388,7 @@ export default function SetupPage() {
                   
                   {/* Fields Table */}
                   <div className="mt-4">
-                    <div className="grid grid-cols-[minmax(150px,1.5fr)_minmax(120px,1fr)_auto_repeat(5,minmax(100px,0.75fr))_auto] gap-x-2 gap-y-1 items-center px-2 py-1.5 text-xs font-medium text-muted-foreground border-b">
+                    <div className="grid grid-cols-[minmax(180px,2fr)_minmax(120px,1fr)_auto_minmax(80px,0.5fr)_minmax(80px,0.5fr)_minmax(120px,1fr)_minmax(150px,1fr)_minmax(150px,1fr)_auto] gap-x-2 gap-y-1 items-center px-2 py-1.5 text-xs font-medium text-muted-foreground border-b">
                       <span>FIELD NAME</span>
                       <span>DATA TYPE</span>
                       <span className="text-center">REQUIRED</span>
@@ -403,7 +403,7 @@ export default function SetupPage() {
                       <div className="space-y-1 pr-2">
                         {entity.fields.length === 0 && <p className="text-xs text-muted-foreground text-center py-4">No fields defined for this entity.</p>}
                         {entity.fields.map((field) => (
-                          <div key={field.internalId} className="grid grid-cols-[minmax(150px,1.5fr)_minmax(120px,1fr)_auto_repeat(5,minmax(100px,0.75fr))_auto] gap-x-2 gap-y-1 items-center p-2 border rounded-md hover:bg-muted/20">
+                          <div key={field.internalId} className="grid grid-cols-[minmax(180px,2fr)_minmax(120px,1fr)_auto_minmax(80px,0.5fr)_minmax(80px,0.5fr)_minmax(120px,1fr)_minmax(150px,1fr)_minmax(150px,1fr)_auto] gap-x-2 gap-y-1 items-center p-2 border rounded-md hover:bg-muted/20">
                             <Input
                               value={field.name}
                               onChange={(e) => handleFieldChange(entity.internalId, field.internalId, 'name', e.target.value)}
