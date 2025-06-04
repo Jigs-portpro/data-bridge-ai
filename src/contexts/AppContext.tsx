@@ -102,10 +102,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         const storedProvider = typeof window !== 'undefined' ? localStorage.getItem(AI_PROVIDER_STORAGE_KEY) : null;
         const storedModel = typeof window !== 'undefined' ? localStorage.getItem(AI_MODEL_NAME_STORAGE_KEY) : null;
 
+        // Check for GOOGLEAI_API_KEY (matching .env)
         if (storedProvider && storedModel && keys[storedProvider.toUpperCase() + '_API_KEY']) {
           setSelectedAiProviderState(storedProvider);
           setSelectedAiModelNameState(storedModel);
-        } else if (keys.GOOGLE_API_KEY) { 
+        } else if (keys.GOOGLEAI_API_KEY) { // Changed from GOOGLE_API_KEY
           setSelectedAiProviderState(DEFAULT_AI_PROVIDER);
           setSelectedAiModelNameState(DEFAULT_AI_MODEL_NAME);
           if (typeof window !== 'undefined') {

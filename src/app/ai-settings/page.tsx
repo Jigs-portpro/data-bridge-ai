@@ -142,12 +142,12 @@ export default function AiSettingsPage() {
   }
 
   const getApiKeyStatus = (providerId: ProviderId) => {
-    const keyName = providerId.toUpperCase() + '_API_KEY';
+    const keyName = providerId.toUpperCase() + '_API_KEY'; // e.g., GOOGLEAI_API_KEY
     return envApiKeys[keyName] ? 'Set' : 'Not Set';
   };
   
   const providerHasNoKey = currentProvider && !envApiKeys[currentProvider.toUpperCase() + '_API_KEY'];
-  const noKeysConfiguredAtAll = !envApiKeys.GOOGLE_API_KEY && !envApiKeys.OPENAI_API_KEY && !envApiKeys.ANTHROPIC_API_KEY;
+  const noKeysConfiguredAtAll = !envApiKeys.GOOGLEAI_API_KEY && !envApiKeys.OPENAI_API_KEY && !envApiKeys.ANTHROPIC_API_KEY;
 
 
   return (
@@ -195,7 +195,7 @@ export default function AiSettingsPage() {
                 </Select>
                 {noKeysConfiguredAtAll && (
                     <p className="text-xs text-destructive mt-1">
-                        No API keys detected in your <code className="font-mono text-xs">.env</code> or <code className="font-mono text-xs">.env.local</code> files. Please set at least one and restart the server.
+                        No API keys detected in your <code className="font-mono text-xs">.env</code> or <code className="font-mono text-xs">.env.local</code> files. Please set GOOGLEAI_API_KEY, OPENAI_API_KEY, or ANTHROPIC_API_KEY and restart the server.
                     </p>
                 )}
               </div>
@@ -318,3 +318,4 @@ export default function AiSettingsPage() {
     </AppLayout>
   );
 }
+
