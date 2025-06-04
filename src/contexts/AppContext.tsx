@@ -195,18 +195,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   }, [isAuthenticated, isAuthLoading, pathname, router]);
 
+  // Simplified setData: only updates data rows. Column updates must be handled separately by callers.
   const setData = useCallback((newData: Record<string, any>[]) => {
     setDataState(newData);
-    if (newData.length > 0) {
-      const newKeys = Object.keys(newData[0]);
-      setColumnsState(prevCols => {
-        const combined = new Set([...prevCols, ...newKeys]);
-        return Array.from(combined);
-      });
-    } else {
-    }
   }, []);
   
+  // Simplified setColumns: only updates column list.
   const setColumns = useCallback((newColumns: string[]) => {
     setColumnsState(newColumns);
   }, []);
