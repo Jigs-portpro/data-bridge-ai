@@ -66,6 +66,8 @@ export const AppContext = createContext<AppContextType | undefined>(undefined);
 const HARDCODED_USERNAME = "admin";
 const HARDCODED_PASSWORD = "password";
 
+const AI_TOOL_DIALOG_IDS = ['correction', 'enrichment', 'reorder', 'anomaly', 'duplicate', 'addressProcessing'];
+
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [data, setDataState] = useState<Record<string, any>[]>([]);
   const [columns, setColumnsState] = useState<string[]>([]);
@@ -102,11 +104,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         const storedProvider = typeof window !== 'undefined' ? localStorage.getItem(AI_PROVIDER_STORAGE_KEY) : null;
         const storedModel = typeof window !== 'undefined' ? localStorage.getItem(AI_MODEL_NAME_STORAGE_KEY) : null;
 
-        // Check for GOOGLEAI_API_KEY (matching .env)
         if (storedProvider && storedModel && keys[storedProvider.toUpperCase() + '_API_KEY']) {
           setSelectedAiProviderState(storedProvider);
           setSelectedAiModelNameState(storedModel);
-        } else if (keys.GOOGLEAI_API_KEY) { // Changed from GOOGLE_API_KEY
+        } else if (keys.GOOGLEAI_API_KEY) {
           setSelectedAiProviderState(DEFAULT_AI_PROVIDER);
           setSelectedAiModelNameState(DEFAULT_AI_MODEL_NAME);
           if (typeof window !== 'undefined') {
@@ -176,14 +177,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (newData.length > 0) {
       const newKeys = Object.keys(newData[0]);
       setColumnsState(prevCols => {
-        // Ensure existing columns are preserved if new data doesn't have all of them (e.g., after an enrichment adds columns)
         const combined = new Set([...prevCols, ...newKeys]);
         return Array.from(combined);
       });
     } else {
-      // If new data is empty, decide if columns should also be cleared or preserved.
-      // For now, preserving existing columns if any, or clearing if no data.
-      // setColumnsState([]); // Or based on specific logic if data is cleared
     }
   }, []);
   
@@ -196,8 +193,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const openDialog = useCallback((dialogName: string) => {
+    if (AI_TOOL_DIALOG_IDS.includes(dialogName) && pathname !== '/') {
+      router.push('/');
+    }
     setActiveDialog(dialogName);
-  }, []);
+  }, [pathname, router]);
 
   const closeDialog = useCallback(() => {
     setActiveDialog(null);
@@ -237,8 +237,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (typeof window !== 'undefined') {
       localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
     }
-    // Do not clear company name here, let it be managed separately
-    // setCurrentCompanyName(null); // Removed this line
   }, []);
   
   const login = useCallback((username: string, pass: string): boolean => {
@@ -256,8 +254,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setIsAuthenticatedState(false);
     if (typeof window !== 'undefined') {
       localStorage.removeItem('appIsAuthenticated');
-      localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY); // Ensure token is cleared on app logout
-      localStorage.removeItem(AUTH_COMPANY_STORAGE_KEY); // Clear company name on app logout
+      localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY); 
+      localStorage.removeItem(AUTH_COMPANY_STORAGE_KEY); 
     }
     setCurrentCompanyNameState(null); 
     setChatHistory([]);
@@ -272,7 +270,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (companyName) {
       setCurrentCompanyName(companyName);
     } else {
-      setCurrentCompanyName(null); // Explicitly clear if no company name provided
+      setCurrentCompanyName(null); 
     }
   }, [setCurrentCompanyName]);
 
@@ -307,7 +305,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   
   const getEnvKeys = useCallback(() => envKeys, [envKeys]);
 
-  // Generic Fetch Logic
   const genericFetchLookupData = async (
     endpoint: string,
     dataSetter: React.Dispatch<React.SetStateAction<any[] | null>>,
@@ -328,7 +325,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Accept': 'application/json, text/plain, */*',
-          // 'Content-Type': 'application/json', // Not typically needed for GET requests
         },
       });
       console.log(`${lookupName} API Response Status:`, response.status, response.statusText);
@@ -336,9 +332,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (!response.ok) {
         let errorData = { message: `API Error: ${response.status} ${response.statusText}` };
         try {
-          const errorText = await response.text(); // Try to get text first, might not be JSON
+          const errorText = await response.text(); 
           console.error(`${lookupName} API Error Response Text:`, errorText);
-          errorData = JSON.parse(errorText); // Then try to parse as JSON
+          errorData = JSON.parse(errorText); 
         } catch (e) {
           console.error(`${lookupName} API Error: Could not parse error response or response was not JSON.`);
         }
@@ -348,10 +344,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const resultData = await response.json();
       console.log(`${lookupName} API Success Response Body:`, resultData);
       
-      // Adapt to common API response patterns:
-      // 1. Direct array: resultData = [...]
-      // 2. Object with a 'data' key holding the array: resultData = { data: [...] }
-      // 3. Object with other keys, where one of them is the array: resultData = { items: [...], count: N }
       let items: any[] = [];
       if (Array.isArray(resultData)) {
         items = resultData;
@@ -359,7 +351,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         if (resultData.data && Array.isArray(resultData.data)) {
           items = resultData.data;
         } else {
-          // Fallback: find the first property that is an array
           const arrayProperty = Object.values(resultData).find(Array.isArray);
           if (arrayProperty) {
             items = arrayProperty as any[];
@@ -469,4 +460,3 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     </AppContext.Provider>
   );
 }
-
