@@ -145,16 +145,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
 
   useEffect(() => {
-    const appAuth = typeof window !== 'undefined' ? localStorage.getItem('appIsAuthenticated') : null;
-    if (appAuth === 'true') {
-      setIsAuthenticatedState(true);
+    if (typeof window !== 'undefined') {
+      const appAuth = localStorage.getItem('appIsAuthenticated');
+      if (appAuth === 'true') {
+        setIsAuthenticatedState(true);
+      }
+      const storedCompany = localStorage.getItem(AUTH_COMPANY_STORAGE_KEY);
+      if (storedCompany) {
+        setCurrentCompanyNameState(storedCompany);
+      }
     }
     setIsAuthLoading(false);
-
-    const storedCompany = typeof window !== 'undefined' ? localStorage.getItem(AUTH_COMPANY_STORAGE_KEY) : null;
-    if (storedCompany) {
-      setCurrentCompanyNameState(storedCompany);
-    }
     fetchEnvKeys(); 
   }, [fetchEnvKeys]);
 
@@ -174,9 +175,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (newData.length > 0) {
       const newKeys = Object.keys(newData[0]);
       setColumnsState(prevCols => {
+        // Ensure existing columns are preserved if new data doesn't have all of them (e.g., after an enrichment adds columns)
         const combined = new Set([...prevCols, ...newKeys]);
         return Array.from(combined);
       });
+    } else {
+      // If new data is empty, decide if columns should also be cleared or preserved.
+      // For now, preserving existing columns if any, or clearing if no data.
+      // setColumnsState([]); // Or based on specific logic if data is cleared
     }
   }, []);
   
@@ -230,6 +236,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (typeof window !== 'undefined') {
       localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
     }
+    // Do not clear company name here, let it be managed separately
+    // setCurrentCompanyName(null); // Removed this line
   }, []);
   
   const login = useCallback((username: string, pass: string): boolean => {
@@ -245,23 +253,25 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   
   const logout = useCallback(() => {
     setIsAuthenticatedState(false);
-    if (typeof window !== 'undefined') localStorage.removeItem('appIsAuthenticated');
-    clearApiToken(); 
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('appIsAuthenticated');
+      localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY); // Ensure token is cleared on app logout
+      localStorage.removeItem(AUTH_COMPANY_STORAGE_KEY); // Clear company name on app logout
+    }
     setCurrentCompanyNameState(null); 
-    if (typeof window !== 'undefined') localStorage.removeItem(AUTH_COMPANY_STORAGE_KEY);
     setChatHistory([]);
     setDataState([]);
     setColumnsState([]);
     setFileNameState(null);
     router.push('/login');
-  }, [router, showToast]); // Removed clearApiToken from here as it's stable
+  }, [router]); 
 
   const storeApiToken = useCallback((token: string, companyName?: string | null) => {
     if (typeof window !== 'undefined') localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, token);
     if (companyName) {
       setCurrentCompanyName(companyName);
     } else {
-      setCurrentCompanyName(null);
+      setCurrentCompanyName(null); // Explicitly clear if no company name provided
     }
   }, [setCurrentCompanyName]);
 
@@ -311,12 +321,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setIsLoading(true);
     try {
       const fullUrl = `https://api.axle.network${endpoint}`;
-      console.log(`Fetching ${lookupName} from: ${fullUrl}`);
+      console.log(`Fetching ${lookupName} from: ${fullUrl} with token: Bearer ${token ? token.substring(0, 10) + '...' : 'MISSING'}`);
       const response = await fetch(fullUrl, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${token}`,
           'Accept': 'application/json, text/plain, */*',
+          // 'Content-Type': 'application/json', // Not typically needed for GET requests
         },
       });
       console.log(`${lookupName} API Response Status:`, response.status, response.statusText);
@@ -324,25 +335,51 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (!response.ok) {
         let errorData = { message: `API Error: ${response.status} ${response.statusText}` };
         try {
-          errorData = await response.json();
-          console.error(`${lookupName} API Error Response Body:`, errorData);
+          const errorText = await response.text(); // Try to get text first, might not be JSON
+          console.error(`${lookupName} API Error Response Text:`, errorText);
+          errorData = JSON.parse(errorText); // Then try to parse as JSON
         } catch (e) {
-          console.error(`${lookupName} API Error: Could not parse error response JSON.`);
+          console.error(`${lookupName} API Error: Could not parse error response or response was not JSON.`);
         }
-        throw new Error(errorData.message || `Failed to fetch ${lookupName}: ${response.status}`);
+        throw new Error(errorData.message || `Failed to fetch ${lookupName}: HTTP ${response.status}`);
       }
 
       const resultData = await response.json();
       console.log(`${lookupName} API Success Response Body:`, resultData);
       
-      const items = Array.isArray(resultData) ? resultData : (resultData.data && Array.isArray(resultData.data)) ? resultData.data : [];
+      // Adapt to common API response patterns:
+      // 1. Direct array: resultData = [...]
+      // 2. Object with a 'data' key holding the array: resultData = { data: [...] }
+      // 3. Object with other keys, where one of them is the array: resultData = { items: [...], count: N }
+      let items: any[] = [];
+      if (Array.isArray(resultData)) {
+        items = resultData;
+      } else if (resultData && typeof resultData === 'object') {
+        if (resultData.data && Array.isArray(resultData.data)) {
+          items = resultData.data;
+        } else {
+          // Fallback: find the first property that is an array
+          const arrayProperty = Object.values(resultData).find(Array.isArray);
+          if (arrayProperty) {
+            items = arrayProperty as any[];
+          } else {
+             console.warn(`${lookupName}: API response is an object but does not contain a 'data' array or any other top-level array.`);
+          }
+        }
+      } else {
+        console.warn(`${lookupName}: Unexpected API response format. Expected array or object with a data array.`);
+      }
       
       dataSetter(items);
       lastFetchedSetter(new Date());
       showToast({ title: 'Success', description: `${items.length} ${lookupName.toLowerCase()} fetched and cached.` });
     } catch (error: any) {
       console.error(`Error fetching ${lookupName}:`, error);
-      showToast({ title: 'Fetch Error', description: error.message || `Could not fetch ${lookupName}.`, variant: 'destructive', duration: 7000 });
+      let description = error.message || `Could not fetch ${lookupName}.`;
+      if (error.message && error.message.toLowerCase().includes('failed to fetch')) {
+        description += ' This might be a network issue or a CORS problem. Check the browser console and network tab for more details.';
+      }
+      showToast({ title: `Fetch Error (${lookupName})`, description, variant: 'destructive', duration: 7000 });
       dataSetter(null);
       lastFetchedSetter(null);
     } finally {
@@ -431,3 +468,4 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     </AppContext.Provider>
   );
 }
+
