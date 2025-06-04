@@ -69,9 +69,9 @@ export default function SetupPage() {
   }, [showToast]);
 
   useEffect(() => {
-    if (!isAuthLoading && !isAuthenticated) {
+    if (isAuthLoading === false && isAuthenticated === false) {
       router.push('/login');
-    } else if (isAuthenticated) {
+    } else if (isAuthenticated === true) {
       fetchConfig();
     }
   }, [isAuthenticated, isAuthLoading, router, fetchConfig]);
@@ -107,23 +107,12 @@ export default function SetupPage() {
         if (cleanedField.maxValue === undefined || cleanedField.maxValue === null || isNaN(Number(cleanedField.maxValue))) delete cleanedField.maxValue;
         if (cleanedField.pattern === '' || cleanedField.pattern === undefined) delete cleanedField.pattern;
         
-        // Clean up lookupValidation
         if (cleanedField.lookupValidation) {
           const lv = cleanedField.lookupValidation;
           const lookupIdIsEmpty = !lv.lookupId || String(lv.lookupId).trim() === '';
-          const lookupFieldIsEmpty = !lv.lookupField || String(lv.lookupField).trim() === '';
-
-          if (lookupIdIsEmpty) { // If lookupId is empty, the whole validation object is invalid
+          
+          if (lookupIdIsEmpty) { 
             delete cleanedField.lookupValidation;
-          } else if (lookupFieldIsEmpty) { 
-            // If lookupId is present but lookupField is empty, it's also often an invalid state.
-            // For now, we'll keep it if lookupId is present, but one might argue to clear it too.
-            // This depends on how strict the backend/validation logic is.
-            // Let's assume for now that an empty lookupField is permissible if lookupId is set,
-            // though it might not be useful. A more robust approach might be to clear
-            // lookupValidation if lookupField is also empty.
-            // For this iteration: if lookupId is set, we keep the object, even if lookupField is empty.
-            // If lookupId is empty, the entire object is removed.
           }
         }
         return cleanedField;
@@ -143,7 +132,6 @@ export default function SetupPage() {
         throw new Error(errorData.message);
       }
       showToast({ title: 'Success', description: 'Configuration saved successfully.' });
-      // Update snapshot with the actual saved structure (after cleaning)
       setInitialConfigSnapshot(JSON.stringify(configToSave)); 
     } catch (error: any) {
       console.error('Failed to save entities config:', error);
@@ -154,7 +142,7 @@ export default function SetupPage() {
   };
   
   const handleCancel = () => {
-    fetchConfig(); // Re-fetch original config
+    fetchConfig(); 
     showToast({ title: 'Changes Discarded', description: 'Local changes have been discarded.'});
   };
 
@@ -235,20 +223,18 @@ export default function SetupPage() {
 
                   if (prop === 'lookupId') {
                     newLv = { ...currentLv, lookupId: value as string };
-                  } else { // prop === 'lookupField'
+                  } else { 
                     newLv = { ...currentLv, lookupField: value as string };
                   }
 
-                  // If both lookupId and lookupField are effectively empty, remove the lookupValidation object
                   if ((!newLv.lookupId || String(newLv.lookupId).trim() === '') && 
                       (!newLv.lookupField || String(newLv.lookupField).trim() === '')) {
-                    const { lookupValidation, ...fieldWithoutLv } = f; // Create a copy without lookupValidation
-                    return fieldWithoutLv; // Return field without lookupValidation property
+                    const { lookupValidation, ...fieldWithoutLv } = f; 
+                    return fieldWithoutLv; 
                   } else {
                     return { ...f, lookupValidation: newLv };
                   }
                 } else {
-                  // Existing logic for other props
                   return {
                     ...f,
                     [prop]: (prop === 'minLength' || prop === 'maxLength' || prop === 'minValue' || prop === 'maxValue')
@@ -266,7 +252,7 @@ export default function SetupPage() {
   };
 
 
-  if (isAuthLoading || !isAuthenticated || (isFetching && !entities.length)) {
+  if (isAuthLoading === true || (isAuthenticated === false && isAuthLoading === false) || (isFetching === true && entities.length === 0 && isAuthenticated === true)) {
     return (
       <AppLayout pageTitle="Loading Setup...">
         <div className="flex h-full items-center justify-center">
@@ -279,7 +265,6 @@ export default function SetupPage() {
   return (
     <AppLayout pageTitle="Target Entities">
       <div className="flex flex-col h-full">
-        {/* Header Section */}
         <div className="p-6 flex-shrink-0">
           <div className="flex justify-between items-start mb-6">
             <div>
@@ -327,11 +312,10 @@ export default function SetupPage() {
 
         <Separator className="flex-shrink-0 my-2"/>
         
-        {/* Entities List */}
         <ScrollArea className="flex-grow min-h-0 p-6 pt-0">
           <div className="space-y-6">
-            {isFetching && entities.length === 0 && <Loader2 className="mx-auto h-8 w-8 animate-spin text-primary" />}
-            {!isFetching && entities.length === 0 && (
+            {isFetching === true && entities.length === 0 && <Loader2 className="mx-auto h-8 w-8 animate-spin text-primary" />}
+            {isFetching === false && entities.length === 0 && (
               <Card className="text-center py-10">
                 <CardContent>
                   <h3 className="text-lg font-semibold">No Entities Configured</h3>
@@ -386,7 +370,6 @@ export default function SetupPage() {
                     </div>
                   </div>
                   
-                  {/* Fields Table */}
                   <div className="mt-4">
                     <div className="grid grid-cols-[minmax(180px,2fr)_minmax(120px,1fr)_auto_minmax(80px,0.5fr)_minmax(80px,0.5fr)_minmax(120px,1fr)_minmax(150px,1fr)_minmax(150px,1fr)_auto] gap-x-2 gap-y-1 items-center px-2 py-1.5 text-xs font-medium text-muted-foreground border-b">
                       <span>FIELD NAME</span>
@@ -399,7 +382,7 @@ export default function SetupPage() {
                       <span>LOOKUP FIELD</span>
                       <span className="text-right">ACTIONS</span>
                     </div>
-                    <ScrollArea className="max-h-[300px] mt-1"> {/* Vertical scroll for fields */}
+                    <ScrollArea className="max-h-[300px] mt-1"> 
                       <div className="space-y-1 pr-2">
                         {entity.fields.length === 0 && <p className="text-xs text-muted-foreground text-center py-4">No fields defined for this entity.</p>}
                         {entity.fields.map((field) => (
@@ -433,7 +416,6 @@ export default function SetupPage() {
                               />
                             </div>
                             
-                            {/* Conditional Validation Inputs */}
                             {(field.type === 'string' || field.type === 'email') ? (
                               <>
                                 <Input type="number" placeholder="Min L" value={field.minLength ?? ''} onChange={(e) => handleFieldChange(entity.internalId, field.internalId, 'minLength', e.target.value)} className="text-xs h-8"/>
@@ -444,7 +426,7 @@ export default function SetupPage() {
                               <>
                                 <Input type="number" placeholder="Min V" value={field.minValue ?? ''} onChange={(e) => handleFieldChange(entity.internalId, field.internalId, 'minValue', e.target.value)} className="text-xs h-8"/>
                                 <Input type="number" placeholder="Max V" value={field.maxValue ?? ''} onChange={(e) => handleFieldChange(entity.internalId, field.internalId, 'maxValue', e.target.value)} className="text-xs h-8"/>
-                                <div className="w-full h-8"></div> {/* Placeholder for pattern col */}
+                                <div className="w-full h-8"></div> 
                               </>
                             ) : ( 
                               <>
@@ -454,7 +436,6 @@ export default function SetupPage() {
                               </>
                             )}
                             
-                            {/* Lookup Validation Inputs */}
                             <Input 
                                 placeholder="Lookup ID" 
                                 value={field.lookupValidation?.lookupId ?? ''} 
@@ -484,14 +465,13 @@ export default function SetupPage() {
           </div>
         </ScrollArea>
 
-        {/* Footer Section */}
         <div className="p-6 border-t bg-background flex-shrink-0">
           <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={handleCancel} disabled={isSaving || isFetching}>
+            <Button variant="outline" onClick={handleCancel} disabled={isSaving === true || isFetching === true}>
                 <XCircle className="mr-2 h-4 w-4"/> Cancel
             </Button>
-            <Button onClick={handleSaveConfig} disabled={isSaving || isFetching}>
-              {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+            <Button onClick={handleSaveConfig} disabled={isSaving === true || isFetching === true}>
+              {isSaving === true ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
               Save Changes
             </Button>
           </div>

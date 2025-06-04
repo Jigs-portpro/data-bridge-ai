@@ -875,7 +875,11 @@
           "type": "string",
           "required": true,
           "minLength": 2,
-          "maxLength": 100
+          "maxLength": 100,
+          "lookupValidation": {
+            "lookupId": "chassisOwners",
+            "lookupField": "company_name"
+          }
         },
         {
           "name": "Year",
